@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Oorq by gisce</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>Oorq</h1>
+        <p>OpenObject Redis Queue</p>
+
+        <p class="view"><a href="https://github.com/gisce/oorq">View the Project on GitHub <small>gisce/oorq</small></a></p>
+
+
+        <ul>
+          <li><a href="https://github.com/gisce/oorq/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/gisce/oorq/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/gisce/oorq">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h1>RQ for OpenObject</h1>
+
+<p>Using <a href="http://www.python-rq.org">python-rq</a> for OpenObject tasks.</p>
+
+<p><strong>Note:</strong> This module is only tested in OpenERP v5.0.</p>
+
+<p>Example to do a async write.</p>
+
+<h3>Add the decorator to the function</h3>
+
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">osv</span> <span class="kn">import</span> <span class="n">osv</span>
+<span class="kn">from</span> <span class="nn">oorq.decorators</span> <span class="kn">import</span> <span class="n">job</span>
+
+<span class="k">class</span> <span class="nc">ResPartner</span><span class="p">(</span><span class="n">osv</span><span class="o">.</span><span class="n">osv</span><span class="p">):</span>
+    <span class="n">_name</span> <span class="o">=</span> <span class="s">'res.partner'</span>
+    <span class="n">_inherit</span> <span class="o">=</span> <span class="s">'res.partner'</span>
+
+    <span class="nd">@job</span><span class="p">(</span><span class="n">async</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="s">'default'</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">ids</span><span class="p">,</span> <span class="n">vals</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="nb">super</span><span class="p">(</span><span class="n">ResPartner</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">ids</span><span class="p">,</span> <span class="n">vals</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">res</span>
+
+<span class="n">ResPartner</span><span class="p">()</span>
+</pre></div>
+
+<h3>Start the worker</h3>
+
+<div class="highlight"><pre><span class="nv">$ </span>rqworker --path ~/Projects/OpenERP/server/bin --path ~/Projects/OpenERP/server/bin/addons
+</pre></div>
+
+<p><strong>Do fun things :)</strong></p>
+      </section>
+      <footer>
+        <p>This project is maintained by <a href="https://github.com/gisce">gisce</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="javascripts/scale.fix.js"></script>
+    
+  </body>
+</html>
