@@ -11,6 +11,8 @@ from tools import config
 class job(object):
     def __init__(self, *args, **kwargs):
         self.async = True
+        self.queue = 'default'
+        self.timeout = None
         # Assign all the arguments to attributes
         for arg, value in kwargs.items():
             setattr(self, arg, value)
@@ -27,7 +29,8 @@ class job(object):
                 uid = args[2]
                 fname = f.__name__
                 redis_conn = Redis()
-                q = Queue(connection=redis_conn, async=self.async)
+                q = Queue(self.queue, default_timeout=self.timeout,
+                          connection=redis_conn, async=self.async)
                 job = q.enqueue(execute, config['addons_path'], dbname, uid,
                                 osv_object, fname, *args[3:])
                 return job.result

@@ -5,7 +5,7 @@ class ResPartner(osv.osv):
     _name = 'res.partner'
     _inherit = 'res.partner'
 
-    @job(async=True)
+    @job(async=True, queue='default')
     def write(self, cr, user, ids, vals, context=None):
         #TODO: process before updating resource
         res = super(ResPartner, self).write(cr, user, ids, vals, context)
