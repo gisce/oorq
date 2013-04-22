@@ -2,6 +2,7 @@
 from hashlib import sha1
 
 from rq import Queue
+from rq import get_current_job
 from redis import Redis
 
 from tasks import execute
@@ -27,7 +28,8 @@ class job(object):
         token = sha1(f.__name__).hexdigest()
 
         def f_job(*args, **kwargs):
-            if not args[-1] == token:
+            current_job = get_current_job()
+            if not args[-1] == token and not current_job:
                 # Add the token as a last argument
                 args += (token,)
                 # Default arguments
@@ -49,6 +51,7 @@ class job(object):
                 return job.result
             else:
                 # Remove the token
-                args = args[:-1]
+                if args[-1] == token:
+                    args = args[:-1]
                 return f(*args, **kwargs)
         return f_job
