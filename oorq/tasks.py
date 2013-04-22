@@ -1,10 +1,15 @@
-def execute(addons_path, dbname, uid, obj, method, *args, **kw):
+from datetime import datetime
+
+
+def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
+    start = datetime.now()
+    # Dissabling logging in OpenERP
     import logging
     logging.disable(logging.CRITICAL)
     import netsvc
     import tools
-    tools.config['db_name'] = dbname
-    tools.config['addons_path'] = addons_path
+    for attr, value in conf_attrs.items():
+        tools.config[attr] = value
     import pooler
     from tools import config
     import osv
@@ -12,4 +17,11 @@ def execute(addons_path, dbname, uid, obj, method, *args, **kw):
     import report
     import service
     osv_ = osv.osv.osv_pool()
-    return osv_.execute(dbname, uid, obj, method, *args, **kw)
+    pooler.get_db_and_pool(dbname)
+    logging.disable(logging.DEBUG)
+    logger = logging.getLogger()
+    logger.handlers = []
+    logging.basicConfig()
+    res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+    logger.info('Time elapsed: %s' % (datetime.now() - start))
+    return res

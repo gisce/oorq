@@ -1,12 +1,18 @@
 # -*- coding: utf-8 -*-
-import time
 from hashlib import sha1
 
-from rq import Connection, Queue
+from rq import Queue
 from redis import Redis
 
 from tasks import execute
 from tools import config
+import netsvc
+
+
+def log(msg, level=netsvc.LOG_INFO):
+    logger = netsvc.Logger()
+    logger.notifyChannel('oorq', level, msg)
+
 
 class job(object):
     def __init__(self, *args, **kwargs):
@@ -19,6 +25,7 @@ class job(object):
 
     def __call__(self, f):
         token = sha1(f.__name__).hexdigest()
+
         def f_job(*args, **kwargs):
             if not args[-1] == token:
                 # Add the token as a last argument
@@ -31,8 +38,14 @@ class job(object):
                 redis_conn = Redis()
                 q = Queue(self.queue, default_timeout=self.timeout,
                           connection=redis_conn, async=self.async)
-                job = q.enqueue(execute, config['addons_path'], dbname, uid,
-                                osv_object, fname, *args[3:])
+                # Pass OpenERP server config to the worker
+                conf_attrs = dict(
+                    [(attr, value) for attr, value in config.options.items()]
+                )
+                job = q.enqueue(execute, conf_attrs, dbname, uid, osv_object,
+                                fname, *args[3:])
+                log('Enqueued job (id:%s) : [%s] pool(%s).%s%s'
+                        % (job.id, dbname, osv_object, fname, args[2:]))
                 return job.result
             else:
                 # Remove the token
