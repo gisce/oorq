@@ -16,6 +16,7 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import workflow
     import report
     import service
+    import sql_db
     osv_ = osv.osv.osv_pool()
     pooler.get_db_and_pool(dbname)
     logging.disable(logging.DEBUG)
@@ -24,4 +25,5 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     logging.basicConfig()
     res = osv_.execute(dbname, uid, obj, method, *args, **kw)
     logger.info('Time elapsed: %s' % (datetime.now() - start))
+    sql_db.close_db(dbname)
     return res
