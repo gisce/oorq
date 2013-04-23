@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openerp>
+    <data>
+        <!-- Base menu -->
+        <menuitem id="menu_oorq" name="OpenObject Redis Queue" parent="base.menu_administration"/>
+        <!-- Worker -->
+        <record id="view_oorq_worker_tree" model="ir.ui.view">
+            <field name="name">oorq.worker.tree</field>
+            <field name="model">oorq.worker</field>
+            <field name="type">tree</field>
+            <field name="arch" type="xml">
+                <tree string="Connected Workers">
+                    <field name="name"/>
+                    <field name="queues"/>
+                    <field name="state"/>
+                </tree>
+            </field>
+        </record>
+        <record id="action_orq_worker_tree" model="ir.actions.act_window">
+            <field name="name">Connected Workers</field>
+            <field name="res_model">oorq.worker</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree</field>
+            <field name="auto_refresh">1</field>
+            <field name="view_id" ref="view_oorq_worker_tree"/>
+        </record>
+        <menuitem id="menu_oorq_worker" action="action_orq_worker_tree" parent="menu_oorq"/>
+        <!-- Queue -->
+        <record id="view_oorq_queue_tree" model="ir.ui.view">
+            <field name="name">oorq.queue.tree</field>
+            <field name="model">oorq.queue</field>
+            <field name="type">tree</field>
+            <field name="arch" type="xml">
+                <tree string="Active Queues">
+                    <field name="name"/>
+                    <field name="n_jobs"/>
+                    <field name="is_empty"/>
+                </tree>
+            </field>
+        </record>
+        <record id="action_orq_queue_tree" model="ir.actions.act_window">
+            <field name="name">Active Queues</field>
+            <field name="res_model">oorq.queue</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree</field>
+            <field name="auto_refresh">1</field>
+            <field name="view_id" ref="view_oorq_queue_tree"/>
+        </record>
+        <menuitem id="menu_oorq_queue" action="action_orq_queue_tree" parent="menu_oorq"/>
+        <!-- Job -->
+        <record id="view_oorq_job_tree" model="ir.ui.view">
+            <field name="name">oorq.job.tree</field>
+            <field name="model">oorq.job</field>
+            <field name="type">tree</field>
+            <field name="arch" type="xml">
+                <tree string="Active jobs">
+                    <field name="jid"/>
+                    <field name="queue"/>
+                    <field name="created_at"/>
+                    <field name="enqueued_at"/>
+                    <field name="ended_at"/>
+                    <field name="origin"/>
+                    <field name="result"/>
+                    <field name="exc_info"/>
+                    <field name="description"/>
+                </tree>
+            </field>
+        </record>
+        <record id="action_orq_job_tree" model="ir.actions.act_window">
+            <field name="name">Active jobs</field>
+            <field name="res_model">oorq.job</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree</field>
+            <field name="auto_refresh">1</field>
+            <field name="view_id" ref="view_oorq_job_tree"/>
+        </record>
+        <menuitem id="menu_oorq_job" action="action_orq_job_tree" parent="menu_oorq"/>
+        <!-- Failed jobs -->
+        <record id="action_orq_failed_job_tree" model="ir.actions.act_window">
+            <field name="name">Failed jobs</field>
+            <field name="res_model">oorq.job</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree</field>
+            <field name="auto_refresh">1</field>
+            <field name="context">{'queue': 'failed'}</field>
+            <field name="view_id" ref="view_oorq_job_tree"/>
+        </record>
+        <menuitem id="menu_oorq_failed_job" action="action_orq_failed_job_tree" parent="menu_oorq"/>
+    </data>
+</openerp>

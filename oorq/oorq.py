@@ -38,6 +38,10 @@ class OorqBase(osv.osv):
             _('You cannot write')
         )
 
+    def search(self, cursor, uid, args, offset=0, limit=None, order=None,
+               context=None, count=False):
+        return [False]
+
 OorqBase()
 
 
@@ -131,6 +135,10 @@ class OorqJob(osv.osv):
             queues = [Queue(context['queue'])]
         else:
             queues = Queue.all()
+            try:
+                queues.remove(Queue('failed'))
+            except ValueError:
+                pass
         jobs = []
         for qi, queue in enumerate(queues):
             jobs += [dict(

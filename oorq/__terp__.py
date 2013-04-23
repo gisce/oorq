@@ -10,7 +10,7 @@
       * Use python-rq (Redis Queue) to manage jobs
     """,
     "init_xml": [],
-    'update_xml': [],
+    'update_xml': ['oorq_view.xml'],
     'demo_xml': [],
     'installable': True,
     'active': False,
