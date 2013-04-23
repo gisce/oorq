@@ -6,6 +6,7 @@ from tools.translate import _
 
 from redis import Redis
 from rq import Worker, Queue
+from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection
 
 
@@ -133,6 +134,20 @@ class OorqJob(osv.osv):
         'exc_info': fields.text('Exception info'),
         'description': fields.text('Description')
     }
+
+    def cancel(self, cursor, uid, ids, context=None):
+        if not context:
+            context = {}
+        if 'jid' in context:
+            cancel_job(context['jid'])
+        return True
+
+    def requeue(self, cursor, uid, ids, context=None):
+        if not context:
+            context = {}
+        if 'jid' in context:
+            requeue_job(context['jid'])
+        return True
 
     def read(self, cursor, uid, ids, fields=None, context=None):
         """Show connected workers.
