@@ -80,8 +80,8 @@ class OorqQueue(osv.osv):
 
     _columns = {
         'name': fields.char('Worker name', size=64),
-        'queues': fields.char('Queues', size=256),
-        'state': fields.char('State', size=32)
+        'n_jobs': fields.integer('Number of jobs'),
+        'is_empty': fields.boolean('Is empty'),
     }
 
     def read(self, cursor, uid, ids, fields=None, context=None):
@@ -93,6 +93,7 @@ class OorqQueue(osv.osv):
             id=i + 1,
             name=queue.name,
             n_jobs=queue.count,
+           is_emprty=queue.is_empty,
             __last_updadate=False
         ) for i, queue in enumerate(Queue.all())]
         return queues
@@ -101,7 +102,7 @@ OorqQueue()
 
 
 class OorqJob(osv.osv):
-    """OpenObject RQ Queue.
+    """OpenObject RQ Job.
     """
     _name = 'oorq.job'
     _inherit = 'oorq.base'
@@ -109,6 +110,7 @@ class OorqJob(osv.osv):
 
     _columns = {
         'jid': fields.char('Job Id', size=36),
+        'queue': fields.char('Queue', size=32),
         'created_at': fields.datetime('Created at'),
         'enqueued_at': fields.datetime('Enqueued at'),
         'ended_at': fields.datetime('Ended at'),
@@ -134,6 +136,7 @@ class OorqJob(osv.osv):
             jobs += [dict(
                 id=int('%s%s' % (qi + 1, ji)),
                 jid=job.id,
+                queue=queue.name,
                 created_at=serialize_date(job.created_at),
                 enqueued_at=serialize_date(job.enqueued_at),
                 ended_at=serialize_date(job.ended_at),
