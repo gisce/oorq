@@ -1,11 +1,23 @@
 # -*- coding: utf-8 -*-
 
+import netsvc
 from osv import osv, fields
 from tools.translate import _
 
 from redis import Redis
 from rq import Worker, Queue
-from rq import push_connection
+from rq import push_connection, get_current_connection
+
+
+def oorq_log(msg, level=netsvc.LOG_INFO):
+    logger = netsvc.Logger()
+    logger.notifyChannel('oorq', level, msg)
+
+
+def setup_redis_connection():
+    if not get_current_connection():
+        redis_conn = Redis()
+        push_connection(redis_conn)
 
 
 def serialize_date(dt):
@@ -61,8 +73,7 @@ class OorqWorker(osv.osv):
     def read(self, cursor, uid, ids, fields=None, context=None):
         """Show connected workers.
         """
-        redis_conn = Redis()
-        push_connection(redis_conn)
+        setup_redis_connection()
         workers = [dict(
             id=worker.pid,
             name=worker.name,
@@ -91,8 +102,7 @@ class OorqQueue(osv.osv):
     def read(self, cursor, uid, ids, fields=None, context=None):
         """Show connected workers.
         """
-        redis_conn = Redis()
-        push_connection(redis_conn)
+        setup_redis_connection()
         queues = [dict(
             id=i + 1,
             name=queue.name,
@@ -127,8 +137,7 @@ class OorqJob(osv.osv):
     def read(self, cursor, uid, ids, fields=None, context=None):
         """Show connected workers.
         """
-        redis_conn = Redis()
-        push_connection(redis_conn)
+        setup_redis_connection()
         if not context:
             context = {}
         if 'queue' in context:
