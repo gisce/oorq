@@ -2,3 +2,4 @@
 """OpenObject RQ.
 """
 import ir_cron
+import oorq
