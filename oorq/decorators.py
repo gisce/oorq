@@ -3,7 +3,7 @@ from hashlib import sha1
 
 from rq import Queue
 from rq import get_current_job
-from redis import Redis
+from oorq import setup_redis_connection
 
 from tasks import execute
 from tools import config
@@ -37,7 +37,7 @@ class job(object):
                 dbname = args[1].dbname
                 uid = args[2]
                 fname = f.__name__
-                redis_conn = Redis()
+                redis_conn = setup_redis_connection()
                 q = Queue(self.queue, default_timeout=self.timeout,
                           connection=redis_conn, async=self.async)
                 # Pass OpenERP server config to the worker
