@@ -2,9 +2,10 @@
 
 import netsvc
 from osv import osv, fields
+from tools import config
 from tools.translate import _
 
-from redis import Redis
+from redis import Redis, from_url
 from rq import Worker, Queue
 from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection
@@ -16,9 +17,17 @@ def oorq_log(msg, level=netsvc.LOG_INFO):
 
 
 def setup_redis_connection():
-    if not get_current_connection():
-        redis_conn = Redis()
+    redis_conn = get_current_connection()
+    if not redis_conn:
+        if config.get('redis_url', False):
+            oorq_log('Connecting to redis using redis_url: %s'
+                     % config['redis_url'])
+            redis_conn = from_url(config['redis_url'])
+        else:
+            oorq_log('Connecting to redis using defaults')
+            redis_conn = Redis()
         push_connection(redis_conn)
+    return redis_conn
 
 
 def serialize_date(dt):
