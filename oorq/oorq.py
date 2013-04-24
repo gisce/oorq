@@ -24,6 +24,7 @@ def setup_redis_connection():
                      % config['redis_url'])
             redis_conn = from_url(config['redis_url'])
         else:
+            oorq_log('Connecting to redis using defaults')
             redis_conn = Redis()
         push_connection(redis_conn)
     return redis_conn
