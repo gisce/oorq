@@ -2,11 +2,13 @@
 
 from __future__ import division
 import os
+import sys
+import traceback
 from datetime import datetime
 from math import ceil
 
-from rq import get_failed_queue
-
+from rq import get_failed_queue, get_current_job
+from rq.job import Job
 from exceptions import *
 
 
@@ -93,10 +95,13 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         # Create a new job and enqueue to failed queue
         fq = get_failed_queue()
         args[0] = failed_ids
-        failed_job = fq.enqueue(isolated_execute, conf_attrs, dbname, uid, obj,
-                                method, *args)
+        exc_info = ''.join(traceback.format_exception(*sys.exc_info()))
+        job_args = (conf_attrs, dbname, uid, obj, method) + tuple(args)
+        job = Job.create(isolated_execute, job_args)
+        job.origin = get_current_job().origin
+        fq.quarantine(job, exc_info)
         logger.warning('Enqueued failed job (id:%s): [%s] pool(%s).%s%s'
-                           % (failed_job.id, dbname, obj, method, tuple(args)))
+                           % (job.id, dbname, obj, method, tuple(args)))
     logger.info('Time elapsed: %s' % (datetime.now() - start))
     sql_db.close_db(dbname)
     return all_res
