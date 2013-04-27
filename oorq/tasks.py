@@ -1,10 +1,15 @@
+# -*- coding: utf-8 -*-
+
+from __future__ import division
 import os
 from datetime import datetime
+from math import ceil
 
 from exceptions import *
 
 
-def make_chunks(ids, size):
+def make_chunks(ids, n_chunks):
+    size = int(ceil(len(ids) / n_chunks))
     return [ids[x:x + size] for x in xrange(0, len(ids), size)]
 
 

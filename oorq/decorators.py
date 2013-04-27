@@ -4,7 +4,7 @@ from hashlib import sha1
 from rq import Queue
 from rq import get_current_job
 from oorq import setup_redis_connection
-from oorq.exceptions import *
+from exceptions import *
 
 from tasks import make_chunks, execute
 from tools import config
@@ -95,13 +95,16 @@ class split_job(job):
                     task = split_job
                 else:
                     task = execute
-                for idx, chunk in enumerate(make_chunks(ids,self.n_chunks)):
+                # We have to convert args to list
+                args = list(args)
+                chunks = make_chunks(ids, self.n_chunks)
+                for idx, chunk in enumerate(chunks):
                     args[3] = chunk
                     job = q.enqueue(task, conf_attrs, dbname, uid, osv_object,
                                     fname, *args[3:])
-                    log('Enqueued split (%s/%s) job (id:%s): [%s] pool(%s).%s%s'
-                            % (idx, self.n_chunksjob.id, dbname, osv_object,
-                               fname, args[2:]))
+                    log('Enqueued split job (%s/%s) (id:%s): [%s] pool(%s).%s%s'
+                            % (idx + 1, len(chunks), job.id, dbname,
+                               osv_object, fname, tuple(args[2:])))
                     jobs.append(job.id)
                 return jobs
             else:

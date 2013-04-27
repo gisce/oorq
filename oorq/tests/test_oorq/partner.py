@@ -11,9 +11,9 @@ class ResPartner(osv.osv):
         res = super(ResPartner, self).write(cr, user, ids, vals, context)
         return res
     
-    @split_job(n_chunks=4)
+    @split_job(n_chunks=4, isolated=True)
     def write_split(self, cursor, uid, ids, vals, context=None):
-        res = super(ResPartner, self).write(cr, user, ids, vals, context)
+        res = super(ResPartner, self).write(cursor, uid, ids, vals, context)
         return res
 
 ResPartner()
