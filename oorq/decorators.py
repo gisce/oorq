@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from hashlib import sha1
+from multiprocessing import cpu_count
 
 from rq import Queue
 from rq import get_current_job
@@ -62,9 +63,14 @@ class split_job(job):
     """This will split default OpenObject function ids parameters.
     """
     def __init__(self, *args, **kwargs):
-        self.n_chunks = 4
         self.isolated = False
+        # Default make chunks as processors we have + 1
+        self.n_chunks = cpu_count() + 1
+        self.chunk_size = None
         super(split_job, self).__init__(*args, **kwargs)
+        # If size of chunks is assigned don't use n_chunks
+        if self.chunk_size:
+            self.n_chunks = None
 
     def __call__(self, f):
         token = sha1(f.__name__).hexdigest()
@@ -99,7 +105,8 @@ class split_job(job):
                     task = execute
                 # We have to convert args to list
                 args = list(args)
-                chunks = make_chunks(ids, self.n_chunks)
+                chunks = make_chunks(ids, n_chunks=self.n_chunks,
+                                     size=self.chunk_size)
                 for idx, chunk in enumerate(chunks):
                     args[3] = chunk
                     job = q.enqueue(task, conf_attrs, dbname, uid, osv_object,

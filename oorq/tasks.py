@@ -12,8 +12,18 @@ from rq.job import Job
 from exceptions import *
 
 
-def make_chunks(ids, n_chunks):
-    size = int(ceil(len(ids) / n_chunks))
+def make_chunks(ids, n_chunks=None, size=None):
+    """Do chunks from ids.
+
+    We can make chunks either with number of chunks desired or size of every
+    chunk.
+    """
+    if not n_chunks and not size:
+        raise ValueError("n_chunks or size must be passed")
+    if n_chunks and size:
+        raise ValueError("only n_chunks or size must be passed")
+    if not size:
+        size = int(ceil(len(ids) / n_chunks))
     return [ids[x:x + size] for x in xrange(0, len(ids), size)]
 
 
