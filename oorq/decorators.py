@@ -64,6 +64,7 @@ class split_job(job):
     def __init__(self, *args, **kwargs):
         super(split_job, self).__init__(*args, **kwargs)
         self.n_chunks = 4
+        self.isolated = False
 
     def __call__(self, f):
         token = sha1(f.__name__).hexdigest()
@@ -90,10 +91,14 @@ class split_job(job):
                     [(attr, value) for attr, value in config.options.items()]
                 )
                 jobs = []
+                if self.isolated:
+                    task = split_job
+                else:
+                    task = execute
                 for idx, chunk in enumerate(make_chunks(ids,self.n_chunks)):
                     args[3] = chunk
-                    job = q.enqueue(execute, conf_attrs, dbname, uid,
-                                    osv_object, fname, *args[3:])
+                    job = q.enqueue(task, conf_attrs, dbname, uid, osv_object,
+                                    fname, *args[3:])
                     log('Enqueued split (%s/%s) job (id:%s): [%s] pool(%s).%s%s'
                             % (idx, self.n_chunksjob.id, dbname, osv_object,
                                fname, args[2:]))
