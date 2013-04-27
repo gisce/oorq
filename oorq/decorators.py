@@ -93,7 +93,9 @@ class split_job(job):
                 jobs = []
                 if self.isolated:
                     task = isolated_execute
+                    mode = 'isolated'
                 else:
+                    mode = 'not isolated'
                     task = execute
                 # We have to convert args to list
                 args = list(args)
@@ -104,7 +106,7 @@ class split_job(job):
                                     fname, *args[3:])
                     log('Enqueued split job (%s/%s) in %s mode (id:%s): [%s] '
                         'pool(%s).%s%s' % (
-                            idx + 1, len(chunks), task.__name__, job.id,
+                            idx + 1, len(chunks), mode, job.id,
                             dbname, osv_object, fname, tuple(args[2:])
                         )
                     )
