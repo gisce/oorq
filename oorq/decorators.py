@@ -6,7 +6,7 @@ from rq import get_current_job
 from oorq import setup_redis_connection
 from exceptions import *
 
-from tasks import make_chunks, execute
+from tasks import make_chunks, execute, isolated_execute
 from tools import config
 import netsvc
 
@@ -62,9 +62,9 @@ class split_job(job):
     """This will split default OpenObject function ids parameters.
     """
     def __init__(self, *args, **kwargs):
-        super(split_job, self).__init__(*args, **kwargs)
         self.n_chunks = 4
         self.isolated = False
+        super(split_job, self).__init__(*args, **kwargs)
 
     def __call__(self, f):
         token = sha1(f.__name__).hexdigest()
@@ -92,7 +92,7 @@ class split_job(job):
                 )
                 jobs = []
                 if self.isolated:
-                    task = split_job
+                    task = isolated_execute
                 else:
                     task = execute
                 # We have to convert args to list
@@ -102,9 +102,12 @@ class split_job(job):
                     args[3] = chunk
                     job = q.enqueue(task, conf_attrs, dbname, uid, osv_object,
                                     fname, *args[3:])
-                    log('Enqueued split job (%s/%s) (id:%s): [%s] pool(%s).%s%s'
-                            % (idx + 1, len(chunks), job.id, dbname,
-                               osv_object, fname, tuple(args[2:])))
+                    log('Enqueued split job (%s/%s) in %s mode (id:%s): [%s] '
+                        'pool(%s).%s%s' % (
+                            idx + 1, len(chunks), task.__name__, job.id,
+                            dbname, osv_object, fname, tuple(args[2:])
+                        )
+                    )
                     jobs.append(job.id)
                 return jobs
             else:

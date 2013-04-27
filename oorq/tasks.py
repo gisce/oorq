@@ -5,6 +5,8 @@ import os
 from datetime import datetime
 from math import ceil
 
+from rq import get_failed_queue
+
 from exceptions import *
 
 
@@ -75,16 +77,26 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     logging.basicConfig(level=log_level)
     all_res = []
     failed_ids = []
+    # Ensure args is a list to modify
+    args = list(args)
     ids = args[0]
     for exe_id in ids:
         try:
+            logger.info('Executing id %s' % exe_id)
             args[0] = [exe_id]
             res = osv_.execute(dbname, uid, obj, method, *args, **kw)
             all_res.append(res)
         except:
-            logger.error('Execute failed: [%s] %s.%s%s' % (dbname, obj, args))
+            logger.error('Executing id %s failed' % exe_id)
             failed_ids.append(exe_id)
-            # Create a new job and enqueue to failed queue
+    if failed_ids:
+        # Create a new job and enqueue to failed queue
+        fq = get_failed_queue()
+        args[0] = failed_ids
+        failed_job = fq.enqueue(isolated_execute, conf_attrs, dbname, uid, obj,
+                                method, *args)
+        logger.warning('Enqueued failed job (id:%s): [%s] pool(%s).%s%s'
+                           % (failed_job.id, dbname, obj, method, tuple(args)))
     logger.info('Time elapsed: %s' % (datetime.now() - start))
     sql_db.close_db(dbname)
-    return res
+    return all_res

@@ -13,6 +13,8 @@ class ResPartner(osv.osv):
     
     @split_job(n_chunks=4, isolated=True)
     def write_split(self, cursor, uid, ids, vals, context=None):
+        if 5 in ids:
+            raise Exception("We want to fail!")
         res = super(ResPartner, self).write(cursor, uid, ids, vals, context)
         return res
 
