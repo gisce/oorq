@@ -31,7 +31,8 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     start = datetime.now()
     # Disabling logging in OpenERP
     import logging
-    logging.disable(logging.CRITICAL)
+    if not os.getenv('VERBOSE', False):
+        logging.disable(logging.CRITICAL)
     import netsvc
     import tools
     for attr, value in conf_attrs.items():
