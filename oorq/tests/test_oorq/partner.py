@@ -1,4 +1,4 @@
-from osv import osv
+from openerp.osv import osv
 from oorq.decorators import job, split_job
 
 class ResPartner(osv.osv):

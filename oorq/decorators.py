@@ -8,8 +8,8 @@ from oorq import setup_redis_connection
 from exceptions import *
 
 from tasks import make_chunks, execute, isolated_execute
-from tools import config
-import netsvc
+from openerp.tools import config
+from openerp import netsvc
 
 
 def log(msg, level=netsvc.LOG_INFO):
@@ -50,7 +50,7 @@ class job(object):
                                 fname, *args[3:])
                 log('Enqueued job (id:%s): [%s] pool(%s).%s%s'
                         % (job.id, dbname, osv_object, fname, args[2:]))
-                return job.result
+                return True
             else:
                 # Remove the token
                 if args[-1] == token:

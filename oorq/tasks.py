@@ -28,66 +28,23 @@ def make_chunks(ids, n_chunks=None, size=None):
 
 
 def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
-    start = datetime.now()
-    # Disabling logging in OpenERP
-    import logging
-    if not os.getenv('VERBOSE', False):
-        logging.disable(logging.CRITICAL)
-    import netsvc
-    import tools
+    import openerp
     for attr, value in conf_attrs.items():
-        tools.config[attr] = value
-    import pooler
-    from tools import config
-    import osv
-    import workflow
-    import report
-    import service
-    import sql_db
-    osv_ = osv.osv.osv_pool()
-    pooler.get_db_and_pool(dbname)
-    logging.disable(0)
-    logger = logging.getLogger()
-    logger.handlers = []
-    log_level = tools.config['log_level']
-    worker_log_level = os.getenv('LOG', False)
-    if worker_log_level:
-        log_level = getattr(logging, worker_log_level, 'INFO')
-    logging.basicConfig(level=log_level)
-    res = osv_.execute(dbname, uid, obj, method, *args, **kw)
-    logger.info('Time elapsed: %s' % (datetime.now() - start))
-    sql_db.close_db(dbname)
-    return res
+        openerp.tools.config[attr] = value
+    from openerp.osv.osv import object_proxy
+    proxy = object_proxy()
+    return proxy.execute(dbname, uid, obj, method, *args, **kw)
 
 
 def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
+    import openerp
     if not isinstance(args[0], (tuple, list)):
         raise OORQNotIds
-    start = datetime.now()
-    # Disabling logging in OpenERP
-    import logging
-    logging.disable(logging.CRITICAL)
-    import netsvc
-    import tools
     for attr, value in conf_attrs.items():
-        tools.config[attr] = value
-    import pooler
-    from tools import config
-    import osv
-    import workflow
-    import report
-    import service
-    import sql_db
-    osv_ = osv.osv.osv_pool()
-    pooler.get_db_and_pool(dbname)
-    logging.disable(0)
-    logger = logging.getLogger()
-    logger.handlers = []
-    log_level = tools.config['log_level']
-    worker_log_level = os.getenv('LOG', False)
-    if worker_log_level:
-        log_level = getattr(logging, worker_log_level, 'INFO')
-    logging.basicConfig(level=log_level)
+        openerp.tools.config[attr] = value
+    from openerp.osv.osv import object_proxy
+    proxy = object_proxy()
+    logger = openerp.netsvc.init_logger()
     all_res = []
     failed_ids = []
     # Ensure args is a list to modify
@@ -97,7 +54,7 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         try:
             logger.info('Executing id %s' % exe_id)
             args[0] = [exe_id]
-            res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+            res = proxy.execute(dbname, uid, obj, method, *args, **kw)
             all_res.append(res)
         except:
             logger.error('Executing id %s failed' % exe_id)
@@ -113,41 +70,18 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         fq.quarantine(job, exc_info)
         logger.warning('Enqueued failed job (id:%s): [%s] pool(%s).%s%s'
                            % (job.id, dbname, obj, method, tuple(args)))
-    logger.info('Time elapsed: %s' % (datetime.now() - start))
-    sql_db.close_db(dbname)
     return all_res
 
 
 def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     job = get_current_job()
-    start = datetime.now()
-    # Disabling logging in OpenERP
-    import logging
-    logging.disable(logging.CRITICAL)
-    import netsvc
-    import tools
+    from openerp import tools, pooler, netsvc
     for attr, value in conf_attrs.items():
         tools.config[attr] = value
-    import pooler
-    from tools import config
-    import osv
-    import workflow
-    import report
-    import service
-    import sql_db
-    pooler.get_db_and_pool(dbname)
-    logging.disable(0)
-    logger = logging.getLogger()
-    logger.handlers = []
-    log_level = tools.config['log_level']
-    worker_log_level = os.getenv('LOG', False)
-    if worker_log_level:
-        log_level = getattr(logging, worker_log_level, 'INFO')
-    logging.basicConfig(level=log_level)
     cursor = pooler.get_db(dbname).cursor()
     obj = netsvc.LocalService('report.'+obj)
     result, format = obj.create(cursor, uid, ids, datas, context)
     job.meta['format'] = format
     job.save()
-    sql_db.close_db(dbname)
+    cursor.close()
     return result, format
