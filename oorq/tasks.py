@@ -116,3 +116,38 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     logger.info('Time elapsed: %s' % (datetime.now() - start))
     sql_db.close_db(dbname)
     return all_res
+
+
+def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
+    job = get_current_job()
+    start = datetime.now()
+    # Disabling logging in OpenERP
+    import logging
+    logging.disable(logging.CRITICAL)
+    import netsvc
+    import tools
+    for attr, value in conf_attrs.items():
+        tools.config[attr] = value
+    import pooler
+    from tools import config
+    import osv
+    import workflow
+    import report
+    import service
+    import sql_db
+    pooler.get_db_and_pool(dbname)
+    logging.disable(0)
+    logger = logging.getLogger()
+    logger.handlers = []
+    log_level = tools.config['log_level']
+    worker_log_level = os.getenv('LOG', False)
+    if worker_log_level:
+        log_level = getattr(logging, worker_log_level, 'INFO')
+    logging.basicConfig(level=log_level)
+    cursor = pooler.get_db(dbname).cursor()
+    obj = netsvc.LocalService('report.'+obj)
+    result, format = obj.create(cursor, uid, ids, datas, context)
+    job.meta['format'] = format
+    job.save()
+    sql_db.close_db(dbname)
+    return result, format
