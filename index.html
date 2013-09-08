@@ -28,15 +28,25 @@
         </ul>
       </header>
       <section>
-        <h1>RQ for OpenObject</h1>
+        <h1>
+<a name="rq-for-openobject" class="anchor" href="#rq-for-openobject"><span class="octicon octicon-link"></span></a>RQ for OpenObject</h1>
 
 <p>Using <a href="http://www.python-rq.org">python-rq</a> for OpenObject tasks.</p>
 
-<p><strong>Note:</strong> This module is only tested in OpenERP v5.0.</p>
+<h2>
+<a name="api-compatibility" class="anchor" href="#api-compatibility"><span class="octicon octicon-link"></span></a>API compatibility</h2>
 
-<p>Example to do a async write.</p>
+<ul>
+<li>For OpenERP v5 the module versions are <code>v1.X.X</code> or below and branch is <code>api_v5</code>
+</li>
+<li>For OpenERP v6 the module versions are <code>v2.X.X</code> and branch is <code>api_v6</code>
+(this is doesn't exist, if you need it you can send a pull request :)</li>
+<li>For OpenERP v7 the module versions are <code>v3.X.X</code> and branch is `api_v7</li>
+</ul><h2>
+<a name="example-to-do-a-async-write" class="anchor" href="#example-to-do-a-async-write"><span class="octicon octicon-link"></span></a>Example to do a async write.</h2>
 
-<h3>Add the decorator to the function</h3>
+<h3>
+<a name="add-the-decorator-to-the-function" class="anchor" href="#add-the-decorator-to-the-function"><span class="octicon octicon-link"></span></a>Add the decorator to the function</h3>
 
 <div class="highlight"><pre><span class="kn">from</span> <span class="nn">osv</span> <span class="kn">import</span> <span class="n">osv</span>
 <span class="kn">from</span> <span class="nn">oorq.decorators</span> <span class="kn">import</span> <span class="n">job</span>
@@ -45,7 +55,7 @@
     <span class="n">_name</span> <span class="o">=</span> <span class="s">'res.partner'</span>
     <span class="n">_inherit</span> <span class="o">=</span> <span class="s">'res.partner'</span>
 
-    <span class="nd">@job</span><span class="p">(</span><span class="n">async</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="s">'default'</span><span class="p">)</span>
+    <span class="nd">@job</span><span class="p">(</span><span class="n">async</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">ids</span><span class="p">,</span> <span class="n">vals</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="n">res</span> <span class="o">=</span> <span class="nb">super</span><span class="p">(</span><span class="n">ResPartner</span><span class="p">,</span>
                     <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">ids</span><span class="p">,</span> <span class="n">vals</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
@@ -54,10 +64,11 @@
 <span class="n">ResPartner</span><span class="p">()</span>
 </pre></div>
 
-<h3>Start the worker</h3>
+<h3>
+<a name="start-the-worker" class="anchor" href="#start-the-worker"><span class="octicon octicon-link"></span></a>Start the worker</h3>
 
-<div class="highlight"><pre><span class="nv">$ </span>rqworker --path ~/Projects/OpenERP/server/bin <span class="se">\</span>
---path ~/Projects/OpenERP/server/bin/addons
+<div class="highlight"><pre><span class="nv">$ </span><span class="nb">export </span><span class="nv">PYTHONPATH</span><span class="o">=</span>~/Projects/OpenERP/server/bin:~/Projects/OpenERP/server/bin/addons
+<span class="nv">$ </span>rqworker
 </pre></div>
 
 <p><strong>Do fun things :)</strong></p>
