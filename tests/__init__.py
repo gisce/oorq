@@ -49,6 +49,13 @@ class OORQTestCase(unittest.TestCase):
     def setUp(self):
         # Flush beforewards (we like our hygiene)
         self.testconn.flushdb()
+        self.conf = {
+            'database': 'oerp6',
+            'db_user': 'eduard',
+            'db_host': 'localhost',
+            'pg_path': '/Users/eduard/Projects/virtualenvs/gisce-erp/bin/psql',
+            'addons_path': '/Users/eduard/Projects/oerp6/server/bin/addons'
+        }
 
     def tearDown(self):
         # Flush afterwards
