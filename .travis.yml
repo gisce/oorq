@@ -13,7 +13,7 @@ install:
   - curl -L https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xvzf -
   - cd $VIRTUAL_ENV/src/openerp-server-${ERP}.0
   - python setup.py install
-  - psql -c 'create database ${OORQ_DATABASE};' -U postgres
+  - psql -c 'create database $OORQ_DATABASE;' -U postgres
   - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
 script:
   - python -m unittest discover
