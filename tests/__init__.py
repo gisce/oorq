@@ -2,6 +2,7 @@
 """
 
 import logging
+import os
 from rq.compat import is_python_version
 if is_python_version((2, 7), (3, 2)):
     import unittest
@@ -49,12 +50,12 @@ class OORQTestCase(unittest.TestCase):
     def setUp(self):
         # Flush beforewards (we like our hygiene)
         self.testconn.flushdb()
+        for k, v in os.getenv.items():
+            if k.startswith('OORQ_'):
+                k = k.replace('OORQ_', '').lower()
+                self.conf[k] = v
         self.conf = {
-            'database': 'oerp6',
-            'db_user': 'eduard',
-            'db_host': 'localhost',
-            'pg_path': '/Users/eduard/Projects/virtualenvs/gisce-erp/bin/psql',
-            'addons_path': '/Users/eduard/Projects/oerp6/server/bin/addons'
+
         }
 
     def tearDown(self):
