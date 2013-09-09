@@ -33,19 +33,12 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import logging
     if not os.getenv('VERBOSE', False):
         logging.disable(logging.CRITICAL)
-    import netsvc
     import tools
     for attr, value in conf_attrs.items():
         tools.config[attr] = value
-    import pooler
-    from tools import config
     import osv
     import workflow
-    import report
-    import service
-    import sql_db
-    osv_ = osv.osv.osv_pool()
-    pooler.get_db_and_pool(dbname)
+    proxy = osv.osv.object_proxy()
     logging.disable(0)
     logger = logging.getLogger()
     logger.handlers = []
@@ -54,9 +47,8 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     if worker_log_level:
         log_level = getattr(logging, worker_log_level, 'INFO')
     logging.basicConfig(level=log_level)
-    res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+    res = proxy.execute(dbname, uid, obj, method, *args, **kw)
     logger.info('Time elapsed: %s' % (datetime.now() - start))
-    sql_db.close_db(dbname)
     return res
 
 
@@ -67,19 +59,12 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     # Disabling logging in OpenERP
     import logging
     logging.disable(logging.CRITICAL)
-    import netsvc
     import tools
     for attr, value in conf_attrs.items():
         tools.config[attr] = value
-    import pooler
-    from tools import config
     import osv
     import workflow
-    import report
-    import service
-    import sql_db
-    osv_ = osv.osv.osv_pool()
-    pooler.get_db_and_pool(dbname)
+    proxy = osv.osv.object_proxy()
     logging.disable(0)
     logger = logging.getLogger()
     logger.handlers = []
@@ -97,7 +82,7 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         try:
             logger.info('Executing id %s' % exe_id)
             args[0] = [exe_id]
-            res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+            res = proxy.execute(dbname, uid, obj, method, *args, **kw)
             all_res.append(res)
         except:
             logger.error('Executing id %s failed' % exe_id)
@@ -114,7 +99,6 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         logger.warning('Enqueued failed job (id:%s): [%s] pool(%s).%s%s'
                            % (job.id, dbname, obj, method, tuple(args)))
     logger.info('Time elapsed: %s' % (datetime.now() - start))
-    sql_db.close_db(dbname)
     return all_res
 
 
