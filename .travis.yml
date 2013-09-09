@@ -11,10 +11,16 @@ services:
 install:
   - pip install -q -r tests/tests_${ERP}_requirements.txt
   - mkdir -p $VIRTUAL_ENV/src
+  - curl https://github.com/akretion/openerp-server/archive/${ERP}.0.zip > /tmp/${ERP}.0.zip
   - cd $VIRTUAL_ENV/src
-  - curl https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xzf -
+  - unzip /tmp/${ERP}.0.zip
   - cd $VIRTUAL_ENV/src/openerp-server-${ERP}.0
   - python setup.py install
   - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
 script:
   - python -m unittest discover
+notifications:
+  irc:
+    channels: "irc.freenode.org#gisce-commits"
+    on_success: change
+    on_failure: change
