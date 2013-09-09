@@ -1,0 +1,19 @@
+language: python
+python:
+  - "2.6"
+  - "2.7"
+env:
+  - ERP=5 OORQ_DATABASE=oerp5 OORQ_DB_USER=postgres OORQ_DB_HOST=localhost
+before_script:
+  - psql -c 'create database $OORQ_DATABASE;' -U postgres
+services:
+  - redis-server
+install:
+  - pip install -q -r tests/tests_$ERP_requirements.txt
+  - mkdir -p $VIRTUAL_ENV/src
+  - curl https://github.com/akretion/openerp-server/archive/$ERP.0.tar.gz > $VIRTUAL_ENV/src
+  - cd $VIRTUAL_ENV/src/openerp-server-$ERP.0
+  - python setup.py install
+  - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
+script:
+  - python -m unittest discover
