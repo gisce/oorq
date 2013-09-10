@@ -20,7 +20,8 @@ install:
   - createuser -s ${OORQ_DB_USER}
   - createdb --owner=${OORQ_DB_USER} ${OORQ_DATABASE}
   - cd ../../
-  - python openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
+  - python setup.py install
+  - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
   - popd
 script:
   - py.test tests/*.py
