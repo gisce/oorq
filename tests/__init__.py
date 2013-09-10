@@ -55,9 +55,6 @@ class OORQTestCase(unittest.TestCase):
             if k.startswith('OORQ_'):
                 k = k.replace('OORQ_', '').lower()
                 self.conf[k] = v
-        self.conf = {
-
-        }
 
     def tearDown(self):
         # Flush afterwards

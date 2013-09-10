@@ -19,6 +19,6 @@ install:
   - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
 script:
   - popd
-  - python -m unittest discover
+  - py.test
 notifications:
   irc: "irc.freenode.org#gisce-commits"

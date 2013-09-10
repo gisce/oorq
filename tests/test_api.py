@@ -15,8 +15,8 @@ class TestAPI(OORQTestCase):
 
     def test_enqueue_job_read(self):
         q = Queue('oorq_tests', async=False)
-        job = q.enqueue(execute, self.conf, self.conf['database'], 1, 'res.users', 'read', 1, ['name'])
-        self.assertDictEqual(job.result, {'id': 1, 'name': u'User'})
+        job = q.enqueue(execute, self.conf, self.conf['database'], 1, 'res.users', 'read', 1, ['id'])
+        self.assertDictEqual(job.result, {'id': 1})
 
     def test_isolated_job(self):
         q = Queue('oorq_tests', async=False)

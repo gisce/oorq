@@ -6,3 +6,4 @@ pydot==1.0.28
 pyparsing==2.0.1
 reportlab==2.7
 pytz==2013d
+pytest==2.3.5
