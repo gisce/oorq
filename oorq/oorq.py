@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
+from openerp import netsvc
+from openerp.osv import osv, fields
+from openerp.tools import config
+from openerp.tools.translate import _
 
-import netsvc
-from osv import osv, fields
-from tools import config
-from tools.translate import _
 
 from redis import Redis, from_url
 from rq import Worker, Queue
