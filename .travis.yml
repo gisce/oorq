@@ -3,7 +3,7 @@ python:
   - "2.6"
   - "2.7"
 env:
-  - ERP=5 OORQ_DATABASE=oerp5 OORQ_DB_USER=postgres OORQ_DB_HOST=localhost PYTHONPAHT=${VIRTUAL_ENV}/src/openeerp-server-${ERP}.0/server/bin:${VIRTUAL_ENV}/src/openeerp-server-${ERP}.0/server/bin/addons
+  - ERP=5 OORQ_DATABASE=oerp5 OORQ_DB_USER=postgres OORQ_DB_HOST=localhost PYTHONPATH=${VIRTUAL_ENV}/src/openeerp-server-${ERP}.0/server/bin:${VIRTUAL_ENV}/src/openeerp-server-${ERP}.0/server/bin/addons
 services:
   - redis-server
 install:
