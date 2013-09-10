@@ -7,11 +7,10 @@ env:
 services:
   - redis-server
 install:
-  - pushd
   - if [[ $TRAVIS_PYTHON_VERSION == 2.6 ]]; then pip install unittest2; fi
   - pip install -q -r tests/tests_${ERP}_requirements.txt
   - mkdir -p $VIRTUAL_ENV/src
-  - cd $VIRTUAL_ENV/src
+  - pushd $VIRTUAL_ENV/src
   - curl -L https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xvzf -
   - cd $VIRTUAL_ENV/src/openerp-server-${ERP}.0
   - python setup.py install
