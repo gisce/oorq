@@ -4,7 +4,7 @@ python:
   - "2.7"
 env:
   - ERP=5 OORQ_DATABASE=oerp5 OORQ_DB_USER=postgres OORQ_DB_HOST=localhost
-    OORQ_ADDONS_PATH=${HOME}/src/openeerp-server-${ERP}.0/bin/addons
+    OORQ_ADDONS_PATH=${HOME}/src/openerp-server-${ERP}.0/bin/addons
     PYTHONPATH=${HOME}/src/openerp-server-${ERP}.0/bin:${HOME}/src/openerp-server-${ERP}.0/bin/addons
 services:
   - redis-server
@@ -15,10 +15,9 @@ install:
   - mkdir -p ${HOME}/src
   - pushd ${HOME}/src
   - curl -L https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xvzf -
-  - cd ${HOME}/src/openerp-server-${ERP}.0
-  - python setup.py install
+  - cd ${HOME}/src/openerp-server-${ERP}.0/bin
   - psql -c "create database $OORQ_DATABASE;" -U postgres
-  - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
+  - python openerp-server.py --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
   - popd
 script:
   - py.test tests/*.py
