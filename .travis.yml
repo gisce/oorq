@@ -3,22 +3,22 @@ python:
   - "2.6"
   - "2.7"
 env:
-  - ERP=5 OORQ_DATABASE=oerp5 OORQ_DB_USER=postgres OORQ_DB_HOST=localhost OORQ_ADDONS_PATH=${VIRTUAL_ENV}/src/openeerp-server-${ERP}.0/bin/addons
+  - ERP=5 OORQ_DATABASE=oerp5 OORQ_DB_USER=postgres OORQ_DB_HOST=localhost OORQ_ADDONS_PATH=${HOME}/src/openeerp-server-${ERP}.0/bin/addons
 services:
   - redis-server
 install:
   - if [[ $TRAVIS_PYTHON_VERSION == 2.6 ]]; then pip install unittest2; fi
   - pip install -q -r tests/tests_${ERP}_requirements.txt
   - pip install -q -r requirements.txt
-  - mkdir -p $VIRTUAL_ENV/src
-  - pushd $VIRTUAL_ENV/src
+  - mkdir -p ${HOME}/src
+  - pushd ${HOME}/src
   - curl -L https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xvzf -
-  - cd $VIRTUAL_ENV/src/openerp-server-${ERP}.0
+  - cd ${HOME}/src/openerp-server-${ERP}.0
   - python setup.py install
   - psql -c "create database $OORQ_DATABASE;" -U postgres
   - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
 script:
   - popd
-  - PYTHONPATH=${VIRTUAL_ENV}/src/openeerp-server-${ERP}.0/bin:${VIRTUAL_ENV}/src/openeerp-server-${ERP}.0/bin/addons py.test
+  - PYTHONPATH=${HOME}/src/openeerp-server-${ERP}.0/bin:${HOME}/src/openeerp-server-${ERP}.0/bin/addons py.test tests/*.py
 notifications:
   irc: "irc.freenode.org#gisce-commits"
