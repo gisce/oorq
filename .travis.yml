@@ -3,7 +3,7 @@ python:
   - "2.6"
   - "2.7"
 env:
-  - ERP=5 OORQ_DATABASE=oerp5 OORQ_DB_USER=postgres OORQ_DB_HOST=localhost
+  - ERP=7 OORQ_DATABASE=oerp5 OORQ_DB_USER=postgres OORQ_DB_HOST=localhost
     OORQ_ADDONS_PATH=${HOME}/src/openerp-server-${ERP}.0/bin/addons
     PYTHONPATH=${HOME}/src/openerp-server-${ERP}.0/bin:${HOME}/src/openerp-server-${ERP}.0/bin/addons
 services:
