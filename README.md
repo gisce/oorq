@@ -4,10 +4,9 @@ Using [python-rq](http://www.python-rq.org) for OpenObject tasks.
 
 ## API compatibility
 
- * For OpenERP v5 the module versions are `v1.X.X` or below and branch is `api_v5`
- * For OpenERP v6 the module versions are `v2.X.X` and branch is `api_v6`
-   (this is doesn't exist, if you need it you can send a pull request :)
- * For OpenERP v7 the module versions are `v3.X.X` and branch is `api_v7
+ * For OpenERP v5 the module versions are `v1.X.X` or below and branch is `api_v5` [![Build Status](https://travis-ci.org/gisce/oorq.png?branch=api_v5)](https://travis-ci.org/gisce/oorq)
+ * For OpenERP v6 the module versions are `v2.X.X` and branch is `api_v6` [![Build Status](https://travis-ci.org/gisce/oorq.png?branch=api_v6)](https://travis-ci.org/gisce/oorq)
+ * For OpenERP v7 the module versions are `v3.X.X` and branch is `api_v7` [![Build Status](https://travis-ci.org/gisce/oorq.png?branch=api_v7)](https://travis-ci.org/gisce/oorq)
 
 ## Example to do a async write.
 
