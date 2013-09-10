@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from osv import osv
+from openerp.osv import osv
 from rq import get_current_job
 
 
