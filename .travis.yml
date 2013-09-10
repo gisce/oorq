@@ -3,7 +3,7 @@ python:
   - "2.6"
   - "2.7"
 env:
-  - ERP=5 OORQ_DATABASE=oerp5 OORQ_DB_USER=postgres OORQ_DB_HOST=localhost
+  - ERP=5 OORQ_DATABASE=oerp5 OORQ_DB_USER=postgres OORQ_DB_HOST=localhost PYTHONPAHT=${VIRTUAL_ENV}/src/openeerp-server-${ERP}.0/server/bin:${VIRTUAL_ENV}/src/openeerp-server-${ERP}.0/server/bin/addons
 services:
   - redis-server
 install:
@@ -19,6 +19,6 @@ install:
   - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
 script:
   - popd
-  - PYTHONPATH=$VIRTUAL_ENV/lib/python$TRAVIS_PYTHON_VERSION/site-packages/openerp-server py.test
+  - py.test
 notifications:
   irc: "irc.freenode.org#gisce-commits"
