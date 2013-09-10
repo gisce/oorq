@@ -16,8 +16,8 @@ install:
   - pushd ${HOME}/src
   - curl -L https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xvzf -
   - cd ${HOME}/src/openerp-server-${ERP}.0/bin
-  - createuser -s oerp
-  - psql -c "create database $OORQ_DATABASE;" -U oerp
+  - createuser -s ${OORQ_DB_USER}
+  - createdb --owner=${OORQ_DB_USER} ${OORQ_DATABASE}
   - python openerp-server.py --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
   - popd
 script:
