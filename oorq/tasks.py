@@ -38,13 +38,15 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
 
 def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import openerp
+    import logging
     if not isinstance(args[0], (tuple, list)):
         raise OORQNotIds
     for attr, value in conf_attrs.items():
         openerp.tools.config[attr] = value
     from openerp.osv.osv import object_proxy
     proxy = object_proxy()
-    logger = openerp.netsvc.init_logger()
+    openerp.netsvc.init_logger()
+    logger = logging.getLogger(__name__)
     all_res = []
     failed_ids = []
     # Ensure args is a list to modify

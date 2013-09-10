@@ -3,7 +3,7 @@
 """
 # Only import this if we are in OpenERP
 try:
-    import from openerp import netsvc
+    from openerp import netsvc
     import ir_cron
     import oorq
     from exceptions import *
