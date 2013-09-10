@@ -50,6 +50,7 @@ class OORQTestCase(unittest.TestCase):
     def setUp(self):
         # Flush beforewards (we like our hygiene)
         self.testconn.flushdb()
+        self.conf = {}
         for k, v in os.environ.items():
             if k.startswith('OORQ_'):
                 k = k.replace('OORQ_', '').lower()
