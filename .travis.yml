@@ -7,6 +7,7 @@ env:
 services:
   - redis-server
 install:
+  - pwd
   - if [[ $TRAVIS_PYTHON_VERSION == 2.6 ]]; then pip install -r unittest2; fi
   - pip install -q -r tests/tests_${ERP}_requirements.txt
   - mkdir -p $VIRTUAL_ENV/src
@@ -16,8 +17,8 @@ install:
   - python setup.py install
   - psql -c "create database $OORQ_DATABASE;" -U postgres
   - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
-  - cd $HOME/gisce/oorq
 script:
+  - pwd
   - python -m unittest discover
 notifications:
   irc: "irc.freenode.org#gisce-commits"
