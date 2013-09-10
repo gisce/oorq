@@ -9,6 +9,11 @@ if get_current_job():
     import sys
     sys.argv = sys.argv[:1]
 
-import ir_cron
-import oorq
-from exceptions import *
+# Only import this if we are in OpenERP
+try:
+    import netsvc
+    import ir_cron
+    import oorq
+    from exceptions import *
+except:
+    pass
