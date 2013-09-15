@@ -5,6 +5,7 @@ from osv import osv, fields
 from tools import config
 from tools.translate import _
 
+from hashlib import sha1
 from redis import Redis, from_url
 from rq import Worker, Queue
 from rq import cancel_job, requeue_job
@@ -14,6 +15,18 @@ from rq import push_connection, get_current_connection
 def oorq_log(msg, level=netsvc.LOG_INFO):
     logger = netsvc.Logger()
     logger.notifyChannel('oorq', level, msg)
+
+
+def set_hash_job(job):
+    """
+    Assigns hash job to the job
+    @param job: Rq job
+    @return: hash
+    """
+    hash = sha1(job.get_call_string()).hexdigest()
+    job.meta['hash'] = hash
+    job.save()
+    return hash
 
 
 def setup_redis_connection():
