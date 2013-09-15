@@ -35,6 +35,34 @@ def serialize_date(dt):
         return False
     return dt.strftime('%Y-%m-%d %H:%M:%S')
 
+def sql_db_dsn(db_name):
+    import tools
+    _dsn = ''
+    for p in ('host', 'port', 'user', 'password'):
+        cfg = tools.config['db_' + p]
+        if cfg:
+            _dsn += '%s=%s ' % (p, cfg)
+    return '%sdbname=%s' % (_dsn, db_name)
+
+
+def monkeypatch_sql_db_dsn():
+    oorq_log("Monkeypatching sql_db.dsn...")
+    import sql_db
+    sql_db.dsn = sql_db_dsn
+
+
+class OorqPatch(osv.osv):
+    """Monkeypatching!
+    """
+    _name = 'oorq.patch'
+    _auto = False
+
+    def __init__(self, pool, cursor):
+        monkeypatch_sql_db_dsn()
+        super(OorqPatch, self).__init__(pool, cursor)
+
+OorqPatch()
+
 
 class OorqBase(osv.osv):
     """OpenObject RQ Base.
