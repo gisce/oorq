@@ -4,7 +4,7 @@ from multiprocessing import cpu_count
 
 from rq import Queue
 from rq import get_current_job
-from oorq import setup_redis_connection
+from oorq import setup_redis_connection, set_hash_job
 from exceptions import *
 
 from tasks import make_chunks, execute, isolated_execute
@@ -48,6 +48,7 @@ class job(object):
                 )
                 job = q.enqueue(execute, conf_attrs, dbname, uid, osv_object,
                                 fname, *args[3:])
+                hash = set_hash_job(job)
                 log('Enqueued job (id:%s): [%s] pool(%s).%s%s'
                         % (job.id, dbname, osv_object, fname, args[2:]))
                 return True
@@ -111,6 +112,7 @@ class split_job(job):
                     args[3] = chunk
                     job = q.enqueue(task, conf_attrs, dbname, uid, osv_object,
                                     fname, *args[3:])
+                    hash =  set_hash_job(job)
                     log('Enqueued split job (%s/%s) in %s mode (id:%s): [%s] '
                         'pool(%s).%s%s' % (
                             idx + 1, len(chunks), mode, job.id,
