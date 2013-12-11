@@ -44,8 +44,8 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import report
     import service
     import sql_db
-    # Reset the pool with 2 connections as limit
-    sql_db._Pool = sql_db.ConnectionPool(2)
+    # Reset the pool with config connections as limit
+    sql_db._Pool = sql_db.ConnectionPool(tools.config['db_maxconn'])
     osv_ = osv.osv.osv_pool()
     pooler.get_db_and_pool(dbname)
     logging.disable(0)
