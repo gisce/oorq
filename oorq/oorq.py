@@ -5,8 +5,10 @@ from osv import osv, fields
 from tools import config
 from tools.translate import _
 
+import time
 from hashlib import sha1
 from redis import Redis, from_url
+from rq.job import Status
 from rq import Worker, Queue
 from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection
@@ -27,6 +29,34 @@ def set_hash_job(job):
     job.meta['hash'] = hash
     job.save()
     return hash
+
+class JobsPool(object):
+    def __init__(self):
+        self.jobs = []
+        self.results = {}
+        self.joined = False
+
+    def add_job(self, job):
+        if self.joined:
+            raise Exception("You can't add a job, the pool is joined!")
+        self.jobs.append(job)
+
+    @property
+    def all_done(self):
+        jobs_done = {}
+        for job in self.jobs:
+            if job.result and job.id not in self.results:
+                self.results[job.id] = job.result
+            if job.status in (Status.FINISHED, Status.FAILED):
+                jobs_done[job.id] = True
+            else:
+                jobs_done[job.id] = False
+        return all(jobs_done.values())
+
+    def join(self):
+        self.joined = True
+        while not self.all_done:
+            time.sleep(0.1)
 
 
 def setup_redis_connection():
