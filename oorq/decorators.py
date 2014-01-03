@@ -51,7 +51,7 @@ class job(object):
                 hash = set_hash_job(job)
                 log('Enqueued job (id:%s): [%s] pool(%s).%s%s'
                         % (job.id, dbname, osv_object, fname, args[2:]))
-                return job.result
+                return job
             else:
                 # Remove the token
                 if args[-1] == token:
