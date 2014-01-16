@@ -17,8 +17,8 @@ pq = Queue(name=PERMANENT_FAILED)
 for job in fq.jobs:
     job.meta.setdefault('attempts', 0)
     if job.meta['attempts'] > MAX_ATTEMPTS:
-        print "Job %s %s attempts. MAX ATTEMPTS %s limit exceeded" % (
-                job.id, job.meta['attempts'], MAX_ATTEMPTS
+        print "Job %s %s attempts. MAX ATTEMPTS %s limit exceeded on %s" % (
+                job.id, job.meta['attempts'], MAX_ATTEMPTS, job.origin
         )
         print job.description
         print job.exc_info
@@ -28,13 +28,12 @@ for job in fq.jobs:
         print "Moved to %s queue" % PERMANENT_FAILED
     else:
         ago = (times.now() - job.enqueued_at).seconds
-        print "%s: attemps: %s enqueued: %ss ago" % (job.id,
+        print "%s: attemps: %s enqueued: %ss ago on %s" % (job.id,
                                                      job.meta['attempts'],
-                                                     ago),
+                                                     ago,
+                                                     job.origin),
         if ago >= INTERVAL:
             job.meta['attempts'] += 1
             job.save()
             print "(Requeue)"
             requeue_job(job.id)
-        else:
-            print "(Waiting %ss)" % (INTERVAL - ago)
