@@ -29,11 +29,10 @@ for job in fq.jobs:
     else:
         ago = (times.now() - job.enqueued_at).seconds
         if ago >= INTERVAL:
-            print "%s: attemps: %s enqueued: %ss ago on %s" % (job.id,
+            print "%s: attemps: %s enqueued: %ss ago on %s (Requeue)" % (job.id,
                                                      job.meta['attempts'],
                                                      ago,
                                                      job.origin)
             job.meta['attempts'] += 1
             job.save()
-            print "(Requeue)"
             requeue_job(job.id)
