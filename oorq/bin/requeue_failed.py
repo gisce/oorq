@@ -28,11 +28,11 @@ for job in fq.jobs:
         print "Moved to %s queue" % PERMANENT_FAILED
     else:
         ago = (times.now() - job.enqueued_at).seconds
-        print "%s: attemps: %s enqueued: %ss ago on %s" % (job.id,
+        if ago >= INTERVAL:
+            print "%s: attemps: %s enqueued: %ss ago on %s" % (job.id,
                                                      job.meta['attempts'],
                                                      ago,
-                                                     job.origin),
-        if ago >= INTERVAL:
+                                                     job.origin)
             job.meta['attempts'] += 1
             job.save()
             print "(Requeue)"
