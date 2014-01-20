@@ -84,6 +84,8 @@ def main():
     logging.disable(logging.DEBUG)
     setup_loghandlers(level)
     logger.info('OpenERP Server libraries loaded!')
+    logger.info('Shuting down cron')
+    netsvc.SERVICES['im_a_worker'] = True
 
     try:
         queues = map(Queue, args.queues)
