@@ -6,6 +6,7 @@ from openerp.tools.translate import _
 
 
 import time
+import logging
 from hashlib import sha1
 from redis import Redis, from_url
 from rq.job import Status
@@ -14,9 +15,9 @@ from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection
 
 
-def oorq_log(msg, level=netsvc.LOG_INFO):
-    logger = netsvc.Logger()
-    logger.notifyChannel('oorq', level, msg)
+def oorq_log(msg, level=logging.INFO):
+    logger = logging.getLogger('oorq')
+    logger.log(level, msg)
 
 
 def set_hash_job(job):

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from hashlib import sha1
 from multiprocessing import cpu_count
+import logging
 
 from rq import Queue
 from rq import get_current_job
@@ -13,8 +14,8 @@ from openerp import netsvc
 
 
 def log(msg, level=netsvc.LOG_INFO):
-    logger = netsvc.Logger()
-    logger.notifyChannel('oorq', level, msg)
+    logger = logging.getLogger('oorq')
+    logger.log(level, msg)
 
 
 class job(object):
