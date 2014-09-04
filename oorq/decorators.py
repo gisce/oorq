@@ -13,7 +13,7 @@ from openerp.tools import config
 from openerp import netsvc
 
 
-def log(msg, level=netsvc.LOG_INFO):
+def log(msg, level=logging.INFO):
     logger = logging.getLogger('oorq')
     logger.log(level, msg)
 
@@ -48,7 +48,7 @@ class job(object):
                     [(attr, value) for attr, value in config.options.items()]
                 )
                 job = q.enqueue(execute, conf_attrs, dbname, uid, osv_object,
-                                fname, *args[3:])
+                                fname, *args[3:], **kwargs)
                 hash = set_hash_job(job)
                 log('Enqueued job (id:%s): [%s] pool(%s).%s%s'
                         % (job.id, dbname, osv_object, fname, args[2:]))
@@ -112,7 +112,7 @@ class split_job(job):
                 for idx, chunk in enumerate(chunks):
                     args[3] = chunk
                     job = q.enqueue(task, conf_attrs, dbname, uid, osv_object,
-                                    fname, *args[3:])
+                                    fname, *args[3:], **kwargs)
                     hash =  set_hash_job(job)
                     log('Enqueued split job (%s/%s) in %s mode (id:%s): [%s] '
                         'pool(%s).%s%s' % (
