@@ -4,6 +4,6 @@ lxml
 psycopg2
 pydot
 pyparsing
-reportlab
+reportlab<3
 pytz
 pytest
