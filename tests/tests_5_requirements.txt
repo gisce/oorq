@@ -1,5 +1,5 @@
 http://home.gna.org/pychart/old/PyChart-1.26.1.tar.gz
-egenix-mx-base==3.2.6
+egenix-mx-base
 lxml==3.2.3
 psycopg2==2.5.1
 pydot==1.0.28
