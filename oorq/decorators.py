@@ -34,7 +34,7 @@ class job(object):
 
         def f_job(*args, **kwargs):
             current_job = get_current_job()
-            if not args[-1] == token and not current_job:
+            if not args[-1] == token and not current_job and self.async:
                 # Add the token as a last argument
                 args += (token,)
                 # Default arguments
@@ -53,7 +53,7 @@ class job(object):
                                 fname, *args[3:])
                 hash = set_hash_job(job)
                 log('Enqueued job (id:%s): [%s] pool(%s).%s%s'
-                        % (job.id, dbname, osv_object, fname, args[2:]))
+                    % (job.id, dbname, osv_object, fname, args[2:]))
                 return job
             else:
                 # Remove the token
@@ -81,7 +81,7 @@ class split_job(job):
 
         def f_job(*args, **kwargs):
             current_job = get_current_job()
-            if not args[-1] == token and not current_job:
+            if not args[-1] == token and not current_job and self.async:
                 # Add the token as a last argument
                 args += (token,)
                 # Default arguments
