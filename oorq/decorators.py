@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
+from __future__ import absolute_import
 from hashlib import sha1
 from multiprocessing import cpu_count
 
 from rq import Queue
 from rq import get_current_job
-from oorq import setup_redis_connection, set_hash_job
-from exceptions import *
+from .oorq import setup_redis_connection, set_hash_job
+from .utils import config_from_environment
+from .exceptions import *
 
-from tasks import make_chunks, execute, isolated_execute
+from .tasks import make_chunks, execute, isolated_execute
 from tools import config
 import netsvc
 
@@ -23,7 +25,8 @@ class job(object):
         self.queue = 'default'
         self.timeout = None
         # Assign all the arguments to attributes
-        for arg, value in kwargs.items():
+        config = config_from_environment('OORQ', **kwargs)
+        for arg, value in config.items():
             setattr(self, arg, value)
 
     def __call__(self, f):
