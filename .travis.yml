@@ -20,6 +20,8 @@ install:
   - createuser -s ${OORQ_DB_USER}
   - createdb --owner=${OORQ_DB_USER} ${OORQ_DATABASE}
   - cd ../../
+  # Fuck you OpenERP and remove PIL from required packages
+  - apt-get install -y python-imaging
   - python setup.py install
   - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
   - popd
