@@ -1,9 +1,9 @@
 http://home.gna.org/pychart/old/PyChart-1.26.1.tar.gz
-egenix-mx-base==3.2.6
-lxml==3.2.3
-psycopg2==2.5.1
-pydot==1.0.28
-pyparsing==2.0.1
-reportlab==2.7
-pytz==2013d
-pytest==2.3.5
+egenix-mx-base
+lxml<4.0
+psycopg2<3.0
+pydot<2.0
+pyparsing<3.0
+reportlab<3.0
+pytz
+pytest<3.0
