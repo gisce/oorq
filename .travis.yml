@@ -9,8 +9,8 @@ services:
   - redis-server
 install:
   - if [[ $TRAVIS_PYTHON_VERSION == 2.6 ]]; then pip install unittest2; fi
-  - pip install -q -r tests/tests_${ERP}_requirements.txt
-  - pip install -q -r requirements.txt
+  - pip install --no-use-wheel --allow-external -q -r tests/tests_${ERP}_requirements.txt
+  - pip install --no-use-wheel -q -r requirements.txt
   - mkdir -p ${HOME}/src
   - pushd ${HOME}/src
   - curl -L https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xvzf -
@@ -20,6 +20,8 @@ install:
   - createuser -s ${OORQ_DB_USER}
   - createdb --owner=${OORQ_DB_USER} ${OORQ_DATABASE}
   - cd ../../
+  # Fuck you OpenERP and remove PIL from required packages
+  - pip install http://effbot.org/downloads/Imaging-1.1.7.tar.gz
   - python setup.py install
   - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
   - popd

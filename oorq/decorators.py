@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
+from __future__ import absolute_import
 from hashlib import sha1
 from multiprocessing import cpu_count
 
 from rq import Queue
 from rq import get_current_job
-from oorq import setup_redis_connection, set_hash_job
-from exceptions import *
+from .oorq import setup_redis_connection, set_hash_job
+from .utils import config_from_environment
+from .exceptions import *
 
-from tasks import make_chunks, execute, isolated_execute
+from .tasks import make_chunks, execute, isolated_execute
 from openerp.tools import config
 from openerp import netsvc
 
@@ -23,7 +25,8 @@ class job(object):
         self.queue = 'default'
         self.timeout = None
         # Assign all the arguments to attributes
-        for arg, value in kwargs.items():
+        config = config_from_environment('OORQ', **kwargs)
+        for arg, value in config.items():
             setattr(self, arg, value)
 
     def __call__(self, f):
@@ -31,7 +34,7 @@ class job(object):
 
         def f_job(*args, **kwargs):
             current_job = get_current_job()
-            if not args[-1] == token and not current_job:
+            if not args[-1] == token and not current_job and self.async:
                 # Add the token as a last argument
                 args += (token,)
                 # Default arguments
@@ -50,7 +53,7 @@ class job(object):
                                 fname, *args[3:])
                 hash = set_hash_job(job)
                 log('Enqueued job (id:%s): [%s] pool(%s).%s%s'
-                        % (job.id, dbname, osv_object, fname, args[2:]))
+                    % (job.id, dbname, osv_object, fname, args[2:]))
                 return job
             else:
                 # Remove the token
@@ -78,7 +81,7 @@ class split_job(job):
 
         def f_job(*args, **kwargs):
             current_job = get_current_job()
-            if not args[-1] == token and not current_job:
+            if not args[-1] == token and not current_job and self.async:
                 # Add the token as a last argument
                 args += (token,)
                 # Default arguments
