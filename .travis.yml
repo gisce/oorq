@@ -21,7 +21,7 @@ install:
   - createdb --owner=${OORQ_DB_USER} ${OORQ_DATABASE}
   - cd ../../
   # Fuck you OpenERP and remove PIL from required packages
-  - sudo apt-get install -y python-imaging
+  - pip install http://effbot.org/downloads/Imaging-1.1.7.tar.gz
   - python setup.py install
   - openerp-server --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
   - popd
