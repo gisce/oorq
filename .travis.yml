@@ -9,7 +9,7 @@ services:
   - redis-server
 install:
   - if [[ $TRAVIS_PYTHON_VERSION == 2.6 ]]; then pip install unittest2; fi
-  - pip install --no-use-wheel -q -r tests/tests_${ERP}_requirements.txt
+  - pip install --no-use-wheel --allow-external -q -r tests/tests_${ERP}_requirements.txt
   - pip install --no-use-wheel -q -r requirements.txt
   - mkdir -p ${HOME}/src
   - pushd ${HOME}/src
