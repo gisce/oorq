@@ -13,7 +13,7 @@ python-dateutil
 python-openid
 pytz
 redis
-reportlab
+reportlab<3
 rq
 simplejson
 six
