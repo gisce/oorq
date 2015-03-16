@@ -9,7 +9,7 @@ import time
 import logging
 from hashlib import sha1
 from redis import Redis, from_url
-from rq.job import Status
+from rq.job import JobStatus
 from rq import Worker, Queue
 from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection
@@ -48,7 +48,7 @@ class JobsPool(object):
         for job in self.jobs:
             if job.result and job.id not in self.results:
                 self.results[job.id] = job.result
-            if job.status in (Status.FINISHED, Status.FAILED):
+            if job.get_status() in (JobStatus.FINISHED, JobStatus.FAILED):
                 jobs_done[job.id] = True
             else:
                 jobs_done[job.id] = False
