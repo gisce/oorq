@@ -11,7 +11,6 @@ if get_current_job():
 
 # Only import this if we are in OpenERP
 try:
-    import netsvc
     import ir_cron
     import oorq
     from exceptions import *
