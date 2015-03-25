@@ -32,7 +32,8 @@ ResPartner()
 ### Start the worker
 
 ```sh
-$ PYTHONPATH=~/Projects/OpenERP/server/bin:~/Projects/OpenERP/server/bin/addons rqworker
+$ export PYTHONPATH=~/Projects/OpenERP/server/bin:~/Projects/OpenERP/server/bin/addons
+$ rq worker
 ```
 
 **Do fun things :)**
