@@ -5,8 +5,20 @@ class ResPartner(osv.osv):
     _name = 'res.partner'
     _inherit = 'res.partner'
 
+    def test_write_async(self, cursor, uid, ids, vals, context=None):
+        self.write_async(cursor, uid, ids, vals, context)
+        return True
+
+    def test_write_split(self, cursor, uid, ids, vals, context=None):
+        self.write_split(cursor, uid, ids, vals, context)
+        return True
+
+    def test_write_split_size(self, cursor, uid, ids, vals, context=None):
+        self.write_split_size(cursor, uid, ids, vals, context)
+        return True
+
     @job(async=True, queue='default')
-    def write(self, cr, user, ids, vals, context=None):
+    def write_async(self, cr, user, ids, vals, context=None):
         #TODO: process before updating resource
         res = super(ResPartner, self).write(cr, user, ids, vals, context)
         return res
