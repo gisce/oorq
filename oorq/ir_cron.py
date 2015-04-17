@@ -2,7 +2,7 @@
 
 import netsvc
 from osv import osv
-from rq import get_current_job
+from rq import get_current_connection, get_current_job
 
 
 class IrCron(osv.osv):
@@ -13,7 +13,9 @@ class IrCron(osv.osv):
         """Check if we are a worker process.
         """
         im_a_worker = netsvc.SERVICES.get('im_a_worker', False)
-        if not get_current_job() and not im_a_worker:
+        if get_current_connection() and get_current_job() and im_a_worker:
+            pass
+        else:
             super(IrCron, self)._poolJobs(db_name, check)
 
 IrCron()
