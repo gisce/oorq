@@ -1,5 +1,7 @@
 # RQ for OpenObject
 
+[![Join the chat at https://gitter.im/gisce/oorq](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/gisce/oorq?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 Using [python-rq](http://python-rq.org) for OpenObject tasks.
 
 ## API compatibility
