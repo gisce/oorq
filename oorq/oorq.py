@@ -31,6 +31,7 @@ def set_hash_job(job):
     job.save()
     return hash
 
+
 class JobsPool(object):
     def __init__(self):
         self.jobs = []
@@ -78,6 +79,7 @@ def serialize_date(dt):
     if not dt:
         return False
     return dt.strftime('%Y-%m-%d %H:%M:%S')
+
 
 def sql_db_dsn(db_name):
     import tools
