@@ -56,8 +56,8 @@ class job(object):
                 job = q.enqueue(execute, depends_on=current_job, args=job_args,
                                 kwargs=job_kwargs)
                 set_hash_job(job)
-                log('Enqueued job (id:%s): [%s] pool(%s).%s%s'
-                    % (job.id, dbname, osv_object, fname, args[2:]))
+                log('Enqueued job (id:%s) on queue %s: [%s] pool(%s).%s%s'
+                    % (job.id, q.name, dbname, osv_object, fname, args[2:]))
                 return job
             else:
                 # Remove the token
@@ -124,9 +124,9 @@ class split_job(job):
                     job = q.enqueue(task, depends_on=current_job, args=job_args,
                                     kwargs=job_kwargs)
                     set_hash_job(job)
-                    log('Enqueued split job (%s/%s) in %s mode (id:%s): [%s] '
-                        'pool(%s).%s%s' % (
-                            idx + 1, len(chunks), mode, job.id,
+                    log('Enqueued split job (%s/%s) on queue %s in %s mode '
+                        '(id:%s): [%s] pool(%s).%s%s' % (
+                            idx + 1, len(chunks), q.name, mode, job.id,
                             dbname, osv_object, fname, tuple(args[2:])
                         )
                     )
