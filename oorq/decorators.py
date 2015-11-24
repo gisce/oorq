@@ -35,7 +35,7 @@ class job(object):
         def f_job(*args, **kwargs):
             redis_conn = setup_redis_connection()
             current_job = get_current_job()
-            if not args[-1] == token and not current_job and self.async:
+            if not args[-1] == token and self.async:
                 # Add the token as a last argument
                 args += (token,)
                 # Default arguments
@@ -49,11 +49,15 @@ class job(object):
                 conf_attrs = dict(
                     [(attr, value) for attr, value in config.options.items()]
                 )
-                job = q.enqueue(execute, conf_attrs, dbname, uid, osv_object,
-                                fname, *args[3:], **kwargs)
-                hash = set_hash_job(job)
-                log('Enqueued job (id:%s): [%s] pool(%s).%s%s'
-                    % (job.id, dbname, osv_object, fname, args[2:]))
+                job_args = (
+                    conf_attrs, dbname, uid, osv_object, fname
+                ) + args[3:]
+                job_kwargs = kwargs
+                job = q.enqueue(execute, depends_on=current_job, args=job_args,
+                                kwargs=job_kwargs)
+                set_hash_job(job)
+                log('Enqueued job (id:%s) on queue %s: [%s] pool(%s).%s%s'
+                    % (job.id, q.name, dbname, osv_object, fname, args[2:]))
                 return job
             else:
                 # Remove the token
@@ -81,7 +85,7 @@ class split_job(job):
 
         def f_job(*args, **kwargs):
             current_job = get_current_job()
-            if not args[-1] == token and not current_job and self.async:
+            if not args[-1] == token and self.async:
                 # Add the token as a last argument
                 args += (token,)
                 # Default arguments
@@ -113,12 +117,16 @@ class split_job(job):
                                      size=self.chunk_size)
                 for idx, chunk in enumerate(chunks):
                     args[3] = chunk
-                    job = q.enqueue(task, conf_attrs, dbname, uid, osv_object,
-                                    fname, *args[3:], **kwargs)
-                    hash =  set_hash_job(job)
-                    log('Enqueued split job (%s/%s) in %s mode (id:%s): [%s] '
-                        'pool(%s).%s%s' % (
-                            idx + 1, len(chunks), mode, job.id,
+                    job_args = [
+                        conf_attrs, dbname, uid, osv_object, fname
+                    ] + args[3:]
+                    job_kwargs = kwargs
+                    job = q.enqueue(task, depends_on=current_job, args=job_args,
+                                    kwargs=job_kwargs)
+                    set_hash_job(job)
+                    log('Enqueued split job (%s/%s) on queue %s in %s mode '
+                        '(id:%s): [%s] pool(%s).%s%s' % (
+                            idx + 1, len(chunks), q.name, mode, job.id,
                             dbname, osv_object, fname, tuple(args[2:])
                         )
                     )

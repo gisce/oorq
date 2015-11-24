@@ -17,6 +17,10 @@ class ResPartner(osv.osv):
         self.write_split_size(cursor, uid, ids, vals, context)
         return True
 
+    def test_dependency_job(self, cursor, uid, ids, vals, context=None):
+        self.dependency_job(cursor, uid, ids, vals, context=context)
+        return True
+
     @job(async=True, queue='default')
     def write_async(self, cr, user, ids, vals, context=None):
         #TODO: process before updating resource
@@ -34,5 +38,14 @@ class ResPartner(osv.osv):
     def write_split_size(self, cursor, uid, ids, vals, context=None):
         res = super(ResPartner, self).write(cursor, uid, ids, vals, context)
         return res
+
+    @job(queue='dependency')
+    def dependency_job(self, cursor, uid, ids, vals, context=None):
+        print "First job"
+        import time
+        self.write_async(cursor, uid, ids, vals, context=context)
+        print "I'm working and not affected for the subjob"
+        time.sleep(5)
+        return True
 
 ResPartner()
