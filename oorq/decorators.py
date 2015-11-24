@@ -51,7 +51,7 @@ class job(object):
                 )
                 job_args = (
                     conf_attrs, dbname, uid, osv_object, fname
-                ) + args[:3]
+                ) + args[3:]
                 job_kwargs = kwargs
                 job = q.enqueue(execute, depends_on=current_job, args=job_args,
                                 kwargs=job_kwargs)
