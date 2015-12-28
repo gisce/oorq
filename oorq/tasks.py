@@ -37,6 +37,12 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import tools
     for attr, value in conf_attrs.items():
         tools.config[attr] = value
+    _ad = os.path.abspath(os.path.join(tools.config['root_path'], 'addons'))
+    ad = os.path.abspath(tools.config['addons_path'])
+
+    sys.path.insert(1, _ad)
+    if ad != _ad:
+        sys.path.insert(1, ad)
     import pooler
     from tools import config
     import osv
