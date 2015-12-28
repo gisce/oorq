@@ -36,7 +36,36 @@ class JobsPool(object):
     def __init__(self):
         self.jobs = []
         self.results = {}
-        self.joined = False
+        self._joined = False
+        self._num_jobs = 0
+        self._num_jobs_done = 0
+
+    @property
+    def joined(self):
+        return self._joined
+
+    @joined.setter
+    def joined(self, value):
+        self._num_jobs = len(self.jobs)
+        self._joined = value
+
+    @property
+    def num_jobs(self):
+        if self.joined:
+            return self._num_jobs
+        else:
+            return len(self.jobs)
+
+    @property
+    def progress(self):
+        if not self.joined:
+            done = 0
+            for job in self.jobs:
+                if job.get_status() in (JobStatus.FINISHED, JobStatus.FAILED):
+                    done += 1
+        else:
+            done = self._num_jobs_done
+        return (done * 1.0 / self.num_jobs) * 100
 
     def add_job(self, job):
         if self.joined:
@@ -46,13 +75,16 @@ class JobsPool(object):
     @property
     def all_done(self):
         jobs_done = {}
+        n_jobs_done = 0
         for job in self.jobs:
             if job.result and job.id not in self.results:
                 self.results[job.id] = job.result
             if job.get_status() in (JobStatus.FINISHED, JobStatus.FAILED):
                 jobs_done[job.id] = True
+                n_jobs_done += 1
             else:
                 jobs_done[job.id] = False
+        self._num_jobs_done = n_jobs_done
         return all(jobs_done.values())
 
     def join(self):
