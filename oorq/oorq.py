@@ -32,6 +32,11 @@ def set_hash_job(job):
     return hash
 
 
+def get_queue(name, **kwargs):
+    redis_conn = setup_redis_connection()
+    return Queue(name, connection=redis_conn, **kwargs)
+
+
 class JobsPool(object):
     def __init__(self):
         self.jobs = []
