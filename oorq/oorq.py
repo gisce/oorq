@@ -14,6 +14,8 @@ from rq import Worker, Queue
 from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection
 
+from .utils import config_from_environment
+
 
 def oorq_log(msg, level=logging.INFO):
     logger = logging.getLogger('oorq')
@@ -37,6 +39,15 @@ def get_queue(name, **kwargs):
     return Queue(name, connection=redis_conn, **kwargs)
 
 
+class SyncJob(object):
+    def __init__(self, job_id, result):
+        self.id = job_id,
+        self.result = result
+
+    def get_status(self):
+        return JobStatus.FINISHED
+
+
 class JobsPool(object):
     def __init__(self):
         self.jobs = []
@@ -44,6 +55,11 @@ class JobsPool(object):
         self._joined = False
         self._num_jobs = 0
         self._num_jobs_done = 0
+        async = config_from_environment('OORQ').get('async')
+        self.async = True
+        if async is not None:
+            self.async = async
+
 
     @property
     def joined(self):
@@ -75,6 +91,9 @@ class JobsPool(object):
     def add_job(self, job):
         if self.joined:
             raise Exception("You can't add a job, the pool is joined!")
+        if not self.async:
+            # Fake object to work when working in not asynchronous mode
+            job = SyncJob(id(job), job)
         self.jobs.append(job)
 
     @property
