@@ -14,6 +14,8 @@ from rq import Worker, Queue
 from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection
 
+from .utils import config_from_environment
+
 
 def oorq_log(msg, level=logging.INFO):
     logger = logging.getLogger('oorq')
@@ -32,27 +34,81 @@ def set_hash_job(job):
     return hash
 
 
+def get_queue(name, **kwargs):
+    redis_conn = setup_redis_connection()
+    return Queue(name, connection=redis_conn, **kwargs)
+
+
+class SyncJob(object):
+    def __init__(self, job_id, result):
+        self.id = job_id,
+        self.result = result
+
+    def get_status(self):
+        return JobStatus.FINISHED
+
+
 class JobsPool(object):
     def __init__(self):
         self.jobs = []
         self.results = {}
-        self.joined = False
+        self._joined = False
+        self._num_jobs = 0
+        self._num_jobs_done = 0
+        async = config_from_environment('OORQ').get('async')
+        self.async = True
+        if async is not None:
+            self.async = async
+
+
+    @property
+    def joined(self):
+        return self._joined
+
+    @joined.setter
+    def joined(self, value):
+        self._num_jobs = len(self.jobs)
+        self._joined = value
+
+    @property
+    def num_jobs(self):
+        if self.joined:
+            return self._num_jobs
+        else:
+            return len(self.jobs)
+
+    @property
+    def progress(self):
+        if not self.joined:
+            done = 0
+            for job in self.jobs:
+                if job.get_status() in (JobStatus.FINISHED, JobStatus.FAILED):
+                    done += 1
+        else:
+            done = self._num_jobs_done
+        return (done * 1.0 / self.num_jobs) * 100
 
     def add_job(self, job):
         if self.joined:
             raise Exception("You can't add a job, the pool is joined!")
+        if not self.async:
+            # Fake object to work when working in not asynchronous mode
+            job = SyncJob(id(job), job)
         self.jobs.append(job)
 
     @property
     def all_done(self):
         jobs_done = {}
+        n_jobs_done = 0
         for job in self.jobs:
             if job.result and job.id not in self.results:
                 self.results[job.id] = job.result
             if job.get_status() in (JobStatus.FINISHED, JobStatus.FAILED):
                 jobs_done[job.id] = True
+                n_jobs_done += 1
             else:
                 jobs_done[job.id] = False
+        self._num_jobs_done = n_jobs_done
         return all(jobs_done.values())
 
     def join(self):
