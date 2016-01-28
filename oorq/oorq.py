@@ -36,16 +36,21 @@ def set_hash_job(job):
 
 def get_queue(name, **kwargs):
     redis_conn = setup_redis_connection()
+    async = config_from_environment('OORQ').get('async')
+    if async is not None:
+        kwargs['async'] = async
     return Queue(name, connection=redis_conn, **kwargs)
 
 
-class SyncJob(object):
-    def __init__(self, job_id, result):
-        self.id = job_id,
-        self.result = result
+def fix_status_sync_job(job):
+    """This class is for waiting the next release of RQ #640
+    """
+    import types
 
     def get_status(self):
         return JobStatus.FINISHED
+
+    job.get_status = types.MethodType(get_status, job)
 
 
 class JobsPool(object):
@@ -92,8 +97,8 @@ class JobsPool(object):
         if self.joined:
             raise Exception("You can't add a job, the pool is joined!")
         if not self.async:
-            # Fake object to work when working in not asynchronous mode
-            job = SyncJob(id(job), job)
+            # RQ Pull Request: #640
+            fix_status_sync_job(job)
         self.jobs.append(job)
 
     @property
