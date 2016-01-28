@@ -36,6 +36,9 @@ def set_hash_job(job):
 
 def get_queue(name, **kwargs):
     redis_conn = setup_redis_connection()
+    async = config_from_environment('OORQ').get('async')
+    if async is not None:
+        kwargs['async'] = async
     return Queue(name, connection=redis_conn, **kwargs)
 
 
