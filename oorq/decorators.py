@@ -130,7 +130,7 @@ class split_job(job):
                             dbname, osv_object, fname, tuple(args[2:])
                         )
                     )
-                    jobs.append(job.id)
+                    jobs.append(job)
                 return jobs
             else:
                 # Remove the token
