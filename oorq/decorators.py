@@ -84,6 +84,7 @@ class split_job(job):
         token = sha1(f.__name__).hexdigest()
 
         def f_job(*args, **kwargs):
+            redis_conn = setup_redis_connection()
             current_job = get_current_job()
             if not args[-1] == token and self.async:
                 # Add the token as a last argument
@@ -97,7 +98,6 @@ class split_job(job):
                     raise OORQNotIds()
                 
                 fname = f.__name__
-                redis_conn = setup_redis_connection()
                 q = Queue(self.queue, default_timeout=self.timeout,
                           connection=redis_conn, async=self.async)
                 # Pass OpenERP server configuration to the worker
