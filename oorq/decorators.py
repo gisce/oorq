@@ -24,6 +24,7 @@ class job(object):
         self.async = True
         self.queue = 'default'
         self.timeout = None
+        self.result_ttl = None
         # Assign all the arguments to attributes
         config = config_from_environment('OORQ', **kwargs)
         for arg, value in config.items():
@@ -53,8 +54,13 @@ class job(object):
                     conf_attrs, dbname, uid, osv_object, fname
                 ) + args[3:]
                 job_kwargs = kwargs
-                job = q.enqueue(execute, depends_on=current_job, args=job_args,
-                                kwargs=job_kwargs)
+                job = q.enqueue(
+                    execute,
+                    depends_on=current_job,
+                    result_ttl=self.result_ttl,
+                    args=job_args,
+                    kwargs=job_kwargs
+                )
                 set_hash_job(job)
                 log('Enqueued job (id:%s) on queue %s: [%s] pool(%s).%s%s'
                     % (job.id, q.name, dbname, osv_object, fname, args[2:]))
@@ -121,8 +127,13 @@ class split_job(job):
                         conf_attrs, dbname, uid, osv_object, fname
                     ] + args[3:]
                     job_kwargs = kwargs
-                    job = q.enqueue(task, depends_on=current_job, args=job_args,
-                                    kwargs=job_kwargs)
+                    job = q.enqueue(
+                        task,
+                        depends_on=current_job,
+                        result_ttl=self.result_ttl,
+                        args=job_args,
+                        kwargs=job_kwargs
+                    )
                     set_hash_job(job)
                     log('Enqueued split job (%s/%s) on queue %s in %s mode '
                         '(id:%s): [%s] pool(%s).%s%s' % (
