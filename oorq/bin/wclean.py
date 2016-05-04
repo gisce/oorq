@@ -14,5 +14,5 @@ redis_uri = len(sys.argv) > 2 and sys.argv[2] or DEFAULT_REDIS_URI
 redis_conn = from_url(redis_uri)
 
 # Whe expire the key to delete de worker from redis
-redis_conn.expire('rq.worker.%s' % worker_name, 0)
+redis_conn.expire('rq:worker:%s' % worker_name, 0)
 
