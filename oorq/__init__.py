@@ -14,6 +14,7 @@ if get_current_connection() and get_current_job():
 try:
     import ir_cron
     import oorq
+    import xmlrpc
     from exceptions import *
 except:
     pass
