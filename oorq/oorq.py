@@ -56,7 +56,8 @@ def fix_status_sync_job(job):
 class JobsPool(object):
     def __init__(self):
         self.pending_jobs = []
-        self.done_jobs = []
+        self.finished_jobs = []
+        self.failed_jobs = []
         self.results = {}
         self._joined = False
         self._num_jobs = 0
@@ -86,6 +87,10 @@ class JobsPool(object):
     def jobs(self):
         return self.pending_jobs + self.done_jobs
 
+    @property
+    def done_jobs(self):
+        return self.failed_jobs + self.finished_jobs
+
     def add_job(self, job):
         if self.joined:
             raise Exception("You can't add a job, the pool is joined!")
@@ -98,10 +103,14 @@ class JobsPool(object):
     def all_done(self):
         jobs = []
         for job in self.pending_jobs:
-            if job.get_status() in (JobStatus.FINISHED, JobStatus.FAILED):
-                self.done_jobs.append(job)
-                if job.id not in self.results:
-                    self.results[job.id] = job.result
+            job_status = job.get_status()
+            if job_status in (JobStatus.FINISHED, JobStatus.FAILED):
+                if job_status == JobStatus.FINISHED:
+                    self.finished_jobs.append(job)
+                    if job.id not in self.results:
+                        self.results[job.id] = job.result
+                else:
+                    self.failed_jobs.append(job)
             else:
                 jobs.append(job)
         self.pending_jobs = jobs

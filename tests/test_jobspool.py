@@ -48,6 +48,7 @@ class TestJobsPool(unittest.TestCase):
         self.assertEqual(jpool.all_done, True)
         self.assertEqual(jpool.progress, 100)
         self.assertEqual(len(jpool.pending_jobs), 0)
+        self.assertEqual(len(jpool.finished_jobs), 200)
         self.assertEqual(len(jpool.done_jobs), 200)
 
     def test_excpetion_raised_when_adding_job_and_is_joined(self):
@@ -101,4 +102,33 @@ class TestJobsPool(unittest.TestCase):
         self.assertEqual(jpool.all_done, True)
         self.assertEqual(jpool.progress, 100)
         self.assertEqual(len(jpool.pending_jobs), 0)
+        self.assertEqual(len(jpool.finished_jobs), 0)
+        self.assertEqual(len(jpool.failed_jobs), 200)
+        self.assertEqual(len(jpool.done_jobs), 200)
+
+    def test_done_jobs_is_failed_and_finished(self):
+        jpool = JobsPool()
+        for _ in range(0, 200):
+            jpool.add_job(FakeJob())
+        self.assertEqual(jpool.progress, 0)
+
+        jobs = jpool.pending_jobs[0:100]
+        for job in jobs:
+            job.status = JobStatus.FINISHED
+
+        self.assertEqual(jpool.progress, 0)
+
+        self.assertEqual(jpool.all_done, False)
+        self.assertEqual(jpool.progress, 50)
+        self.assertEqual(len(jpool.pending_jobs), 100)
+        self.assertEqual(len(jpool.done_jobs), 100)
+
+        for job in jpool.pending_jobs:
+            job.status = JobStatus.FAILED
+
+        self.assertEqual(jpool.all_done, True)
+        self.assertEqual(jpool.progress, 100)
+        self.assertEqual(len(jpool.pending_jobs), 0)
+        self.assertEqual(len(jpool.finished_jobs), 100)
+        self.assertEqual(len(jpool.failed_jobs), 100)
         self.assertEqual(len(jpool.done_jobs), 200)
