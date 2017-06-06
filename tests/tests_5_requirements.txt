@@ -1,4 +1,4 @@
-http://home.gna.org/pychart/old/PyChart-1.26.1.tar.gz
+Python-Chart
 egenix-mx-base
 lxml
 psycopg2

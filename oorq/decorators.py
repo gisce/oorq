@@ -6,7 +6,7 @@ from multiprocessing import cpu_count
 from rq import Queue
 from rq import get_current_job
 from .oorq import setup_redis_connection, set_hash_job
-from .utils import config_from_environment
+from osconf import config_from_environment
 from .exceptions import *
 
 from .tasks import make_chunks, execute, isolated_execute
