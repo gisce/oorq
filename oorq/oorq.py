@@ -13,8 +13,8 @@ from rq.job import JobStatus
 from rq import Worker, Queue
 from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection
+from osconf import config_from_environment
 
-from .utils import config_from_environment
 
 
 def oorq_log(msg, level=logging.INFO):
