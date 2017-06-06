@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 from hashlib import sha1
 from multiprocessing import cpu_count
-import uuid
+import os
 
 from rq import Queue
 from rq import get_current_job
@@ -158,12 +158,11 @@ def create_jobs_group(dbname, uid, name, internal, jobs_ids):
         [(attr, value) for attr, value in config.options.items()]
     )
     conn = setup_redis_connection()
-    queue = 'jobspool'.format(str(uuid.uuid4())[:8])
+    queue = 'jobspool-autoworker'
     q = Queue(queue, default_timeout=3600 * 24, connection=conn)
     q.enqueue(
         update_jobs_group, conf_attrs, dbname, uid, name, internal, jobs_ids
     )
-    import os
     os.environ['AUTOWORKER_REDIS_URL'] = config.get('redis_url', False)
     aw = AutoWorker(queue, max_procs=1)
     aw.work()
