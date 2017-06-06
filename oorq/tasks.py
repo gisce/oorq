@@ -9,7 +9,8 @@ from math import ceil
 
 from rq import get_failed_queue, get_current_job
 from rq.job import Job
-from exceptions import *
+from .exceptions import *
+from .oorq import StoredJobsPool, setup_redis_connection
 
 
 def make_chunks(ids, n_chunks=None, size=None):
@@ -159,3 +160,44 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     job.save()
     sql_db.close_db(dbname)
     return result, format
+
+
+def update_jobs_group(conf_attrs, dbname, uid, name, internal, jobs_ids):
+    start = datetime.now()
+    import logging
+    if not os.getenv('VERBOSE', False):
+        logging.disable(logging.CRITICAL)
+    import netsvc
+    import tools
+    for attr, value in conf_attrs.items():
+        tools.config[attr] = value
+    _ad = os.path.abspath(os.path.join(tools.config['root_path'], 'addons'))
+    ad = os.path.abspath(tools.config['addons_path'])
+
+    sys.path.insert(1, _ad)
+    if ad != _ad:
+        sys.path.insert(1, ad)
+    import pooler
+    from tools import config
+    import osv
+    import workflow
+    import report
+    import service
+    import sql_db
+    # Reset the pool with config connections as limit
+    sql_db._Pool = sql_db.ConnectionPool(int(tools.config['db_maxconn']))
+    jobs_pool = StoredJobsPool(dbname, uid, name, internal)
+    redis_conn = setup_redis_connection()
+    for job_id in jobs_ids:
+        jobs_pool.add_job(Job.fetch(job_id))
+    jobs_pool.join()
+    logging.disable(0)
+    logger = logging.getLogger()
+    logger.handlers = []
+    log_level = tools.config['log_level']
+    worker_log_level = os.getenv('LOG', False)
+    if worker_log_level:
+        log_level = getattr(logging, worker_log_level, 'INFO')
+    logging.basicConfig(level=log_level)
+    logger.info('Time elapsed: %s' % (datetime.now() - start))
+    sql_db.close_db(dbname)

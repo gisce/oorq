@@ -1,5 +1,7 @@
 from osv import osv
 from oorq.decorators import job, split_job
+from oorq.decorators import create_jobs_group
+
 
 class ResPartner(osv.osv):
     _name = 'res.partner'
@@ -25,6 +27,8 @@ class ResPartner(osv.osv):
     def write_async(self, cr, user, ids, vals, context=None):
         #TODO: process before updating resource
         res = super(ResPartner, self).write(cr, user, ids, vals, context)
+        import time
+        time.sleep(1)
         return res
     
     @split_job(n_chunks=4, isolated=True)
@@ -46,6 +50,15 @@ class ResPartner(osv.osv):
         self.write_async(cursor, uid, ids, vals, context=context)
         print "I'm working and not affected for the subjob"
         time.sleep(5)
+        return True
+
+    def massive_write(self, cursor, uid, context=None):
+        ids = self.search(cursor, uid, [])
+        jobs_ids = []
+        for p_id in ids:
+            j = self.write_async(cursor, uid, [p_id], {'active': 1})
+            jobs_ids.append(j.id)
+        create_jobs_group(cursor.dbname, uid, 'Massive write', 'res.partner.massive.write', jobs_ids)
         return True
 
 ResPartner()
