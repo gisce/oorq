@@ -121,5 +121,47 @@
             <field name="view_id" ref="view_oorq_job_tree"/>
         </record>
         <menuitem id="menu_oorq_failed_job" action="action_orq_failed_job_tree" parent="menu_oorq"/>
+        <!-- OORQ Jobs Group -->
+        <record model="ir.ui.view" id="view_oorq_jobs_group_form">
+            <field name="name">oorq_jobs_group.form</field>
+            <field name="model">oorq.jobs.group</field>
+            <field name="type">form</field>
+            <field name="arch" type="xml">
+                <form string="Jobs group">
+                    <field name="name" colspan="4" select="1"/>
+                    <field name="progress" colspan="4" widget="progressbar"/>
+                    <field name="start" select="1"/>
+                    <field name="end" select="1"/>
+                    <field name="num_jobs" />
+                    <field name="active" select="1"/>
+                    <field name="user_id" select="1"/>
+                </form>
+            </field>
+        </record>
+        <record model="ir.ui.view" id="view_oorq_jobs_group_tree">
+            <field name="name">oorq_jobs_group.tree</field>
+            <field name="model">oorq.jobs.group</field>
+            <field name="type">tree</field>
+            <field name="arch" type="xml">
+                <tree string="Jobs groups">
+                    <field name="name" colspan="4" select="1"/>
+                    <field name="progress" colspan="4" widget="progressbar"/>
+                    <field name="start"/>
+                    <field name="end"/>
+                    <field name="num_jobs" />
+                    <field name="active"/>
+                    <field name="user_id"/>
+                </tree>
+            </field>
+        </record>
+        <record model="ir.actions.act_window" id="action_oorq_jobs_group_tree">
+            <field name="name">Jobs groups</field>
+            <field name="type">ir.actions.act_window</field>
+            <field name="res_model">oorq.jobs.group</field>
+            <field name="view_type">form</field>
+            <field name="auto_refresh">5</field>
+            <field name="view_id" ref="view_oorq_jobs_group_tree"/>
+        </record>
+        <menuitem name="Jobs groups" action="action_oorq_jobs_group_tree" id="menu_oorq_jobs_group_tree" parent="menu_oorq"/>
     </data>
 </openerp>
