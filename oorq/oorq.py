@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 
-import netsvc
 from osv import osv, fields
 from tools import config
 from tools.translate import _
+import pooler
 
 import time
+from datetime import datetime
 import logging
 from hashlib import sha1
 from redis import Redis, from_url
@@ -15,6 +16,7 @@ from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection
 from osconf import config_from_environment
 
+from .utils import CursorWrapper
 
 
 def oorq_log(msg, level=logging.INFO):
@@ -324,3 +326,70 @@ class OorqJob(osv.osv):
         return jobs
 
 OorqJob()
+
+
+class OorqJobsGroup(osv.osv):
+    _name = 'oorq.jobs.group'
+
+    _columns = {
+        'name': fields.char('Name', size=256),
+        'internal': fields.char('Internal name', size=256),
+        'num_jobs': fields.integer('Number of Jobs'),
+        'progress': fields.float('Progress'),
+        'start': fields.datetime('Start'),
+        'end': fields.datetime('End'),
+        'active': fields.boolean('Active', select=True),
+        'user_id': fields.many2one('res.users', 'User')
+    }
+
+    _defaults = {
+        'start': lambda *a: datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'active': lambda *a: 1,
+    }
+
+    _order = 'start desc'
+
+OorqJobsGroup()
+
+
+class StoredJobsPool(JobsPool):
+
+    REFRESH_INTERVAL = 5
+
+    def __init__(self, dbname, uid, name, internal):
+        self.db, self.pool = pooler.get_db_and_pool(dbname)
+        self.uid = uid
+        self.name = name
+        self.internal = internal
+        super(StoredJobsPool, self).__init__()
+
+    def join(self):
+        self.joined = True
+        obj = self.pool.get('oorq.jobs.group')
+        with CursorWrapper(self.db.cursor()) as wrapper:
+            cursor = wrapper.cursor
+            group_id = obj.create(cursor, self.uid, {
+                'name': self.name,
+                'internal': self.internal,
+                'num_jobs': self.num_jobs,
+                'user_id': self.uid
+            })
+            cursor.commit()
+
+        while not self.all_done:
+            with CursorWrapper(self.db.cursor()) as wrapper:
+                cursor = wrapper.cursor
+                obj.write(cursor, self.uid, [group_id], {
+                    'progress': self.progress
+                })
+                cursor.commit()
+            time.sleep(self.REFRESH_INTERVAL)
+
+        with CursorWrapper(self.db.cursor()) as wrapper:
+            cursor = wrapper.cursor
+            obj.write(cursor, self.uid, [group_id], {
+                'progress': self.progress,
+                'active': 0,
+                'end': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
+            cursor.commit()
