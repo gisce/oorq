@@ -160,9 +160,10 @@ def create_jobs_group(dbname, uid, name, internal, jobs_ids):
     conn = setup_redis_connection()
     queue = 'jobspool-autoworker'
     q = Queue(queue, default_timeout=3600 * 24, connection=conn)
-    q.enqueue(
+    enqueued_job = q.enqueue(
         update_jobs_group, conf_attrs, dbname, uid, name, internal, jobs_ids
     )
     os.environ['AUTOWORKER_REDIS_URL'] = config.get('redis_url', False)
     aw = AutoWorker(queue, max_procs=1)
     aw.work()
+    return enqueued_job
