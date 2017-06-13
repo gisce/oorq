@@ -1,2 +1,4 @@
 rq>=0.5.6
 rq-dashboard
+osconf
+autoworker

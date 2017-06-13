@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 
-import netsvc
 from osv import osv, fields
 from tools import config
 from tools.translate import _
+import pooler
 
 import time
+from datetime import datetime
 import logging
 from hashlib import sha1
 from redis import Redis, from_url
@@ -13,8 +14,9 @@ from rq.job import JobStatus
 from rq import Worker, Queue
 from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection
+from osconf import config_from_environment
 
-from .utils import config_from_environment
+from .utils import CursorWrapper
 
 
 def oorq_log(msg, level=logging.INFO):
@@ -55,7 +57,9 @@ def fix_status_sync_job(job):
 
 class JobsPool(object):
     def __init__(self):
-        self.jobs = []
+        self.pending_jobs = []
+        self.finished_jobs = []
+        self.failed_jobs = []
         self.results = {}
         self._joined = False
         self._num_jobs = 0
@@ -65,33 +69,29 @@ class JobsPool(object):
         if async is not None:
             self.async = async
 
-
     @property
     def joined(self):
         return self._joined
 
     @joined.setter
     def joined(self, value):
-        self._num_jobs = len(self.jobs)
         self._joined = value
 
     @property
     def num_jobs(self):
-        if self.joined:
-            return self._num_jobs
-        else:
-            return len(self.jobs)
+        return len(self.pending_jobs) + len(self.done_jobs)
 
     @property
     def progress(self):
-        if not self.joined:
-            done = 0
-            for job in self.jobs:
-                if job.get_status() in (JobStatus.FINISHED, JobStatus.FAILED):
-                    done += 1
-        else:
-            done = self._num_jobs_done
-        return (done * 1.0 / self.num_jobs) * 100
+        return (len(self.done_jobs) * 1.0 / self.num_jobs) * 100
+
+    @property
+    def jobs(self):
+        return self.pending_jobs + self.done_jobs
+
+    @property
+    def done_jobs(self):
+        return self.failed_jobs + self.finished_jobs
 
     def add_job(self, job):
         if self.joined:
@@ -99,22 +99,24 @@ class JobsPool(object):
         if not self.async:
             # RQ Pull Request: #640
             fix_status_sync_job(job)
-        self.jobs.append(job)
+        self.pending_jobs.append(job)
 
     @property
     def all_done(self):
-        jobs_done = {}
-        n_jobs_done = 0
-        for job in self.jobs:
-            if job.result and job.id not in self.results:
-                self.results[job.id] = job.result
-            if job.get_status() in (JobStatus.FINISHED, JobStatus.FAILED):
-                jobs_done[job.id] = True
-                n_jobs_done += 1
+        jobs = []
+        for job in self.pending_jobs:
+            job_status = job.get_status()
+            if job_status in (JobStatus.FINISHED, JobStatus.FAILED):
+                if job_status == JobStatus.FINISHED:
+                    self.finished_jobs.append(job)
+                    if job.id not in self.results:
+                        self.results[job.id] = job.result
+                else:
+                    self.failed_jobs.append(job)
             else:
-                jobs_done[job.id] = False
-        self._num_jobs_done = n_jobs_done
-        return all(jobs_done.values())
+                jobs.append(job)
+        self.pending_jobs = jobs
+        return not len(self.pending_jobs)
 
     def join(self):
         self.joined = True
@@ -324,3 +326,70 @@ class OorqJob(osv.osv):
         return jobs
 
 OorqJob()
+
+
+class OorqJobsGroup(osv.osv):
+    _name = 'oorq.jobs.group'
+
+    _columns = {
+        'name': fields.char('Name', size=256),
+        'internal': fields.char('Internal name', size=256),
+        'num_jobs': fields.integer('Number of Jobs'),
+        'progress': fields.float('Progress'),
+        'start': fields.datetime('Start'),
+        'end': fields.datetime('End'),
+        'active': fields.boolean('Active', select=True),
+        'user_id': fields.many2one('res.users', 'User')
+    }
+
+    _defaults = {
+        'start': lambda *a: datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'active': lambda *a: 1,
+    }
+
+    _order = 'start desc'
+
+OorqJobsGroup()
+
+
+class StoredJobsPool(JobsPool):
+
+    REFRESH_INTERVAL = 5
+
+    def __init__(self, dbname, uid, name, internal):
+        self.db, self.pool = pooler.get_db_and_pool(dbname)
+        self.uid = uid
+        self.name = name
+        self.internal = internal
+        super(StoredJobsPool, self).__init__()
+
+    def join(self):
+        self.joined = True
+        obj = self.pool.get('oorq.jobs.group')
+        with CursorWrapper(self.db.cursor()) as wrapper:
+            cursor = wrapper.cursor
+            group_id = obj.create(cursor, self.uid, {
+                'name': self.name,
+                'internal': self.internal,
+                'num_jobs': self.num_jobs,
+                'user_id': self.uid
+            })
+            cursor.commit()
+
+        while not self.all_done:
+            with CursorWrapper(self.db.cursor()) as wrapper:
+                cursor = wrapper.cursor
+                obj.write(cursor, self.uid, [group_id], {
+                    'progress': self.progress
+                })
+                cursor.commit()
+            time.sleep(self.REFRESH_INTERVAL)
+
+        with CursorWrapper(self.db.cursor()) as wrapper:
+            cursor = wrapper.cursor
+            obj.write(cursor, self.uid, [group_id], {
+                'progress': self.progress,
+                'active': 0,
+                'end': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
+            cursor.commit()
