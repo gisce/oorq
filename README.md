@@ -1,6 +1,6 @@
 # RQ for OpenObject
 
-Using [python-rq](http://www.python-rq.org) for OpenObject tasks.
+Using [python-rq](http://python-rq.org/) for OpenObject tasks.
 
 ## API compatibility
 
