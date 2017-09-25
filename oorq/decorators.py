@@ -6,7 +6,7 @@ import os
 
 from rq import Queue
 from rq import get_current_job
-from .oorq import setup_redis_connection, set_hash_job
+from .oorq import setup_redis_connection, set_hash_job, AsyncMode
 from osconf import config_from_environment
 from .exceptions import *
 
@@ -23,7 +23,7 @@ def log(msg, level=netsvc.LOG_INFO):
 
 class job(object):
     def __init__(self, *args, **kwargs):
-        self.async = True
+        self.async = AsyncMode.is_async()
         self.queue = 'default'
         self.timeout = None
         self.result_ttl = None

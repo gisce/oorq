@@ -13,7 +13,7 @@ from redis import Redis, from_url
 from rq.job import JobStatus
 from rq import Worker, Queue
 from rq import cancel_job, requeue_job
-from rq import push_connection, get_current_connection
+from rq import push_connection, get_current_connection, local
 from osconf import config_from_environment
 
 from .utils import CursorWrapper
@@ -38,9 +38,7 @@ def set_hash_job(job):
 
 def get_queue(name, **kwargs):
     redis_conn = setup_redis_connection()
-    async = config_from_environment('OORQ').get('async')
-    if async is not None:
-        kwargs['async'] = async
+    kwargs['async'] = AsyncMode.is_async()
     return Queue(name, connection=redis_conn, **kwargs)
 
 
@@ -64,10 +62,7 @@ class JobsPool(object):
         self._joined = False
         self._num_jobs = 0
         self._num_jobs_done = 0
-        async = config_from_environment('OORQ').get('async')
-        self.async = True
-        if async is not None:
-            self.async = async
+        self.async = AsyncMode.is_async()
 
     @property
     def joined(self):
@@ -393,3 +388,30 @@ class StoredJobsPool(JobsPool):
                 'end': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
             cursor.commit()
+
+
+class AsyncMode(object):
+
+    __slots__ = ('mode', )
+
+    def __init__(self, mode='async'):
+        self.mode = mode
+
+    def __enter__(self):
+        _async_mode_stack.push(self)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        _async_mode_stack.pop()
+
+    @staticmethod
+    def is_async():
+        async_mode = _async_mode_stack.top
+        if async_mode is None:
+            async_env = config_from_environment('OORQ').get('async', True)
+            return async_env
+        else:
+            return async_mode.mode == 'async'
+
+
+_async_mode_stack = local.LocalStack()
