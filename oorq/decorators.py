@@ -38,7 +38,8 @@ class job(object):
         def f_job(*args, **kwargs):
             redis_conn = setup_redis_connection()
             current_job = get_current_job()
-            if not args[-1] == token and self.async:
+            async_mode = AsyncMode.is_async()
+            if not args[-1] == token:
                 # Add the token as a last argument
                 args += (token,)
                 # Default arguments
@@ -47,7 +48,7 @@ class job(object):
                 uid = args[2]
                 fname = f.__name__
                 q = Queue(self.queue, default_timeout=self.timeout,
-                          connection=redis_conn, async=self.async)
+                          connection=redis_conn, async=async_mode)
                 # Pass OpenERP server config to the worker
                 conf_attrs = dict(
                     [(attr, value) for attr, value in config.options.items()]
