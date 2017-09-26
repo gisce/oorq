@@ -249,7 +249,7 @@ class OorqQueue(osv.osv):
             id=i + 1,
             name=queue.name,
             n_jobs=queue.count,
-           is_emprty=queue.is_empty,
+            is_emprty=queue.is_empty,
             __last_updadate=False
         ) for i, queue in enumerate(Queue.all())]
         return queues
