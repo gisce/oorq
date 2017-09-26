@@ -1,6 +1,8 @@
 from osv import osv
 from oorq.decorators import job, split_job
 from oorq.decorators import create_jobs_group
+from oorq.oorq import AsyncMode
+from rq.job import Job
 
 
 class ResPartner(osv.osv):
@@ -60,5 +62,15 @@ class ResPartner(osv.osv):
             jobs_ids.append(j.id)
         create_jobs_group(cursor.dbname, uid, 'Massive write', 'res.partner.massive.write', jobs_ids)
         return True
+
+    def write_not_async(self, cursor, uid, ids, values, context=None):
+        if context is None:
+            context = {}
+
+        with AsyncMode(mode='sync'):
+            res = self.write_async(cursor, uid, ids, values, context)
+            assert isinstance(res, Job)
+        return res.result
+
 
 ResPartner()
