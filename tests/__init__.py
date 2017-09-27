@@ -2,7 +2,6 @@
 """
 
 import logging
-import os
 from rq.compat import is_python_version
 if is_python_version((2, 7), (3, 2)):
     import unittest
@@ -11,6 +10,11 @@ else:
 
 from redis import StrictRedis
 from rq import push_connection, pop_connection
+
+from test_api import *
+from test_autoworker import *
+from test_jobspool import *
+from test_monkeypatch import *
 
 
 def find_empty_redis_database():
