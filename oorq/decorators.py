@@ -6,7 +6,7 @@ import os
 
 from rq import Queue
 from rq import get_current_job
-from .oorq import setup_redis_connection, set_hash_job, AsyncMode
+from .oorq import setup_redis_connection, set_hash_job, AsyncMode, get_redis_url
 from osconf import config_from_environment
 from .exceptions import *
 
@@ -164,7 +164,8 @@ def create_jobs_group(dbname, uid, name, internal, jobs_ids):
     enqueued_job = q.enqueue(
         update_jobs_group, conf_attrs, dbname, uid, name, internal, jobs_ids
     )
-    os.environ['AUTOWORKER_REDIS_URL'] = config.get('redis_url', False)
+    if not os.environ['AUTOWORKER_REDIS_URL']:
+        os.environ['AUTOWORKER_REDIS_URL'] = get_redis_url(conn)
     aw = AutoWorker(queue, max_procs=1)
     aw.work()
     return enqueued_job

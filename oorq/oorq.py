@@ -17,7 +17,7 @@ from rq import push_connection, get_current_connection, local
 from osconf import config_from_environment
 
 from .utils import CursorWrapper
-
+import os
 
 def oorq_log(msg, level=logging.INFO):
     logger = logging.getLogger('oorq')
@@ -130,8 +130,21 @@ def setup_redis_connection():
             oorq_log('Connecting to redis using defaults')
             redis_conn = Redis()
         push_connection(redis_conn)
+    os.environ['AUTOWORKER_REDIS_URL'] = get_redis_url(redis_conn)
     return redis_conn
 
+
+def get_redis_url(redis_conn):
+    """
+    Creates redis url from redis connection
+    :param redis_conn:
+    :return: url on the form redis://host:port/db
+    """
+    if not redis_conn:
+        return False
+    return 'redis://{host}:{port}/{db}'.format(
+        **redis_conn.connection_pool.connection_kwargs
+    )
 
 def serialize_date(dt):
     if not dt:

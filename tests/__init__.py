@@ -12,7 +12,6 @@ else:
 from redis import StrictRedis
 from rq import push_connection, pop_connection
 
-
 def find_empty_redis_database():
     """Tries to connect to a random Redis database (starting from 4), and
     will use/connect it when no keys are in there.
