@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<openerp>
+    <data>
+        <!--nous grups -->
+        <record model="res.groups" id="group_oorq_r">
+            <field name="name">OORQ / ReadOnly</field>
+        </record>
+        <record model="res.groups" id="group_oorq_w">
+            <field name="name">OORQ / User</field>
+        </record>
+        <record model="res.groups" id="group_oorq_u">
+            <field name="name">OORQ / Manager</field>
+        </record>
+    </data>
+</openerp>
