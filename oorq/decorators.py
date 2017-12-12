@@ -95,7 +95,8 @@ class split_job(job):
         def f_job(*args, **kwargs):
             redis_conn = setup_redis_connection()
             current_job = get_current_job()
-            if not args[-1] == token and self.async:
+            async = self.async and AsyncMode.is_async()
+            if not args[-1] == token and async:
                 # Add the token as a last argument
                 args += (token,)
                 # Default arguments
