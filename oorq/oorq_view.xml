@@ -149,6 +149,8 @@
                     <field name="start"/>
                     <field name="end"/>
                     <field name="num_jobs" />
+                    <field name="num_failed_jobs" />
+                    <field name="num_success_jobs" />
                     <field name="active"/>
                     <field name="user_id"/>
                 </tree>

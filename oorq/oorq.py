@@ -342,6 +342,8 @@ class OorqJobsGroup(osv.osv):
     _columns = {
         'name': fields.char('Name', size=256),
         'internal': fields.char('Internal name', size=256),
+        'num_failed_jobs': fields.integer('Number of failed Jobs'),
+        'num_success_jobs': fields.integer('Number of success Jobs'),
         'num_jobs': fields.integer('Number of Jobs'),
         'progress': fields.float('Progress'),
         'start': fields.datetime('Start'),
@@ -388,7 +390,9 @@ class StoredJobsPool(JobsPool):
             with CursorWrapper(self.db.cursor()) as wrapper:
                 cursor = wrapper.cursor
                 obj.write(cursor, self.uid, [group_id], {
-                    'progress': self.progress
+                    'progress': self.progress,
+                    'num_failed_jobs': len(self.failed_jobs),
+                    'num_success_jobs': len(self.finished_jobs)
                 })
                 cursor.commit()
             time.sleep(self.REFRESH_INTERVAL)
@@ -398,6 +402,8 @@ class StoredJobsPool(JobsPool):
             obj.write(cursor, self.uid, [group_id], {
                 'progress': self.progress,
                 'active': 0,
+                'num_failed_jobs': len(self.failed_jobs),
+                'num_success_jobs': len(self.finished_jobs),
                 'end': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             })
             cursor.commit()
