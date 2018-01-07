@@ -222,7 +222,11 @@ class OorqWorker(osv.osv):
     _columns = {
         'name': fields.char('Worker name', size=64),
         'queues': fields.char('Queues', size=256),
-        'state': fields.char('State', size=32)
+        'state': fields.char('State', size=32),
+        'total_working_time': fields.integer('Total working time'),
+        'successful_job_count': fields.integer('Successful job count'),
+        'last_heartbeat': fields.datetime('Last heartbeat'),
+        'failed_job_count': fields.integer('Failed job count')
     }
 
     def read(self, cursor, uid, ids, fields=None, context=None):
@@ -234,6 +238,10 @@ class OorqWorker(osv.osv):
             name=worker.name,
             queues=', '.join([q.name for q in worker.queues]),
             state=worker.state,
+            total_working_time=worker.total_working_time,
+            successful_job_count=worker.successful_job_count,
+            failed_job_count=worker.failed_job_count,
+            last_heartbeat=worker.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S'),
             __last_updadate=False
         ) for worker in Worker.all()]
         return workers

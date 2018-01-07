@@ -13,6 +13,10 @@
                     <field name="name"/>
                     <field name="queues"/>
                     <field name="state"/>
+                    <field name="total_working_time"/>
+                    <field name="successful_job_count"/>
+                    <field name="failed_job_count"/>
+                    <field name="last_heartbeat"/>
                 </tree>
             </field>
         </record>
