@@ -10,6 +10,7 @@ from datetime import datetime
 import logging
 from hashlib import sha1
 from redis import Redis, from_url
+from pytz import timezone
 from rq.job import JobStatus
 from rq import Worker, Queue
 from rq import cancel_job, requeue_job
@@ -233,6 +234,8 @@ class OorqWorker(osv.osv):
         """Show connected workers.
         """
         setup_redis_connection()
+        user = self.pool.get('res.users').read(cursor, uid, uid, ['context_tz'])
+        tz = timezone(user['context_tz'] or 'UTC')
         workers = [dict(
             id=worker.pid,
             name=worker.name,
@@ -241,7 +244,9 @@ class OorqWorker(osv.osv):
             total_working_time=worker.total_working_time,
             successful_job_count=worker.successful_job_count,
             failed_job_count=worker.failed_job_count,
-            last_heartbeat=worker.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S'),
+            last_heartbeat=worker.last_heartbeat.replace(
+                tzinfo=timezone('UTC')
+            ).astimezone(tz).strftime('%Y-%m-%d %H:%M:%S'),
             __last_updadate=False
         ) for worker in Worker.all()]
         return workers
