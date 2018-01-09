@@ -6,7 +6,7 @@ from tools.translate import _
 import pooler
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from hashlib import sha1
 from redis import Redis, from_url
@@ -224,7 +224,7 @@ class OorqWorker(osv.osv):
         'name': fields.char('Worker name', size=64),
         'queues': fields.char('Queues', size=256),
         'state': fields.char('State', size=32),
-        'total_working_time': fields.integer('Total working time'),
+        'total_working_time': fields.char('Total working time', size=32),
         'successful_job_count': fields.integer('Successful job count'),
         'last_heartbeat': fields.datetime('Last heartbeat'),
         'failed_job_count': fields.integer('Failed job count')
@@ -241,7 +241,7 @@ class OorqWorker(osv.osv):
             name=worker.name,
             queues=', '.join([q.name for q in worker.queues]),
             state=worker.state,
-            total_working_time=worker.total_working_time,
+            total_working_time=str(timedelta(seconds=worker.total_working_time)),
             successful_job_count=worker.successful_job_count,
             failed_job_count=worker.failed_job_count,
             last_heartbeat=worker.last_heartbeat.replace(
