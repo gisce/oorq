@@ -16,6 +16,7 @@
                     <field name="total_working_time"/>
                     <field name="successful_job_count"/>
                     <field name="failed_job_count"/>
+                    <field name="birth_date"/>
                     <field name="last_heartbeat"/>
                 </tree>
             </field>

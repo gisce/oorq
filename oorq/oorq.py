@@ -226,8 +226,9 @@ class OorqWorker(osv.osv):
         'state': fields.char('State', size=32),
         'total_working_time': fields.char('Total working time', size=32),
         'successful_job_count': fields.integer('Successful job count'),
+        'failed_job_count': fields.integer('Failed job count'),
         'last_heartbeat': fields.datetime('Last heartbeat'),
-        'failed_job_count': fields.integer('Failed job count')
+        'birth_date': fields.datetime('Birth date'),
     }
 
     def read(self, cursor, uid, ids, fields=None, context=None):
@@ -245,6 +246,9 @@ class OorqWorker(osv.osv):
             successful_job_count=worker.successful_job_count,
             failed_job_count=worker.failed_job_count,
             last_heartbeat=worker.last_heartbeat.replace(
+                tzinfo=timezone('UTC')
+            ).astimezone(tz).strftime('%Y-%m-%d %H:%M:%S'),
+            birth_date=worker.birth_date.replace(
                 tzinfo=timezone('UTC')
             ).astimezone(tz).strftime('%Y-%m-%d %H:%M:%S'),
             __last_updadate=False
