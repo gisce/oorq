@@ -243,7 +243,9 @@ class OorqWorker(osv.osv):
             name=worker.name,
             queues=', '.join([q.name for q in worker.queues]),
             state=worker.state,
-            total_working_time=str(timedelta(seconds=worker.total_working_time)),
+            total_working_time=str(timedelta(
+                microseconds=worker.total_working_time
+            )),
             successful_job_count=worker.successful_job_count,
             failed_job_count=worker.failed_job_count,
             last_heartbeat=worker.last_heartbeat.replace(
