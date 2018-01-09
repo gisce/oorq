@@ -229,6 +229,7 @@ class OorqWorker(osv.osv):
         'failed_job_count': fields.integer('Failed job count'),
         'last_heartbeat': fields.datetime('Last heartbeat'),
         'birth_date': fields.datetime('Birth date'),
+        'current_job_id': fields.char('Current Job Id', size=36)
     }
 
     def read(self, cursor, uid, ids, fields=None, context=None):
@@ -251,6 +252,7 @@ class OorqWorker(osv.osv):
             birth_date=worker.birth_date.replace(
                 tzinfo=timezone('UTC')
             ).astimezone(tz).strftime('%Y-%m-%d %H:%M:%S'),
+            current_job_id=worker.get_current_job_id() or False,
             __last_updadate=False
         ) for worker in Worker.all()]
         return workers

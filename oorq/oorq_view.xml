@@ -18,6 +18,7 @@
                     <field name="failed_job_count"/>
                     <field name="birth_date"/>
                     <field name="last_heartbeat"/>
+                    <field name="current_job_id"/>
                 </tree>
             </field>
         </record>
