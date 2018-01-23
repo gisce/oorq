@@ -6,10 +6,11 @@ from tools.translate import _
 import pooler
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from hashlib import sha1
 from redis import Redis, from_url
+from pytz import timezone
 from rq.job import JobStatus
 from rq import Worker, Queue
 from rq import cancel_job, requeue_job
@@ -222,18 +223,38 @@ class OorqWorker(osv.osv):
     _columns = {
         'name': fields.char('Worker name', size=64),
         'queues': fields.char('Queues', size=256),
-        'state': fields.char('State', size=32)
+        'state': fields.char('State', size=32),
+        'total_working_time': fields.char('Total working time', size=32),
+        'successful_job_count': fields.integer('Successful job count'),
+        'failed_job_count': fields.integer('Failed job count'),
+        'last_heartbeat': fields.datetime('Last heartbeat'),
+        'birth_date': fields.datetime('Birth date'),
+        'current_job_id': fields.char('Current Job Id', size=36)
     }
 
     def read(self, cursor, uid, ids, fields=None, context=None):
         """Show connected workers.
         """
         setup_redis_connection()
+        user = self.pool.get('res.users').read(cursor, uid, uid, ['context_tz'])
+        tz = timezone(user['context_tz'] or 'UTC')
         workers = [dict(
             id=worker.pid,
             name=worker.name,
             queues=', '.join([q.name for q in worker.queues]),
             state=worker.state,
+            total_working_time=str(timedelta(
+                microseconds=worker.total_working_time
+            )),
+            successful_job_count=worker.successful_job_count,
+            failed_job_count=worker.failed_job_count,
+            last_heartbeat=worker.last_heartbeat.replace(
+                tzinfo=timezone('UTC')
+            ).astimezone(tz).strftime('%Y-%m-%d %H:%M:%S'),
+            birth_date=worker.birth_date.replace(
+                tzinfo=timezone('UTC')
+            ).astimezone(tz).strftime('%Y-%m-%d %H:%M:%S'),
+            current_job_id=worker.get_current_job_id() or False,
             __last_updadate=False
         ) for worker in Worker.all()]
         return workers
