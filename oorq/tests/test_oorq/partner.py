@@ -25,6 +25,10 @@ class ResPartner(osv.osv):
         self.dependency_job(cursor, uid, ids, vals, context=context)
         return True
 
+    def test_no_enqueue_on_rollback(self, cursor, uid, ids, vals, context=None):
+        self.write_async(cursor, uid, ids, vals, context)
+        raise osv.except_osv('Error', 'Test error!')
+
     @job(async=True, queue='default')
     def write_async(self, cr, user, ids, vals, context=None):
         #TODO: process before updating resource
