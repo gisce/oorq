@@ -64,6 +64,7 @@ class job(object):
         self.queue = 'default'
         self.timeout = None
         self.result_ttl = None
+        self.at_front = False
         # Assign all the arguments to attributes
         config = config_from_environment('OORQ', **kwargs)
         for arg, value in config.items():
@@ -101,6 +102,7 @@ class job(object):
                     kwargs=job_kwargs,
                     result_ttl=self.result_ttl,
                     depends_on=current_job
+                    at_front=self.at_front
                 )
                 set_hash_job(job)
                 transaction_id = id(cursor)
