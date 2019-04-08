@@ -27,6 +27,7 @@ class job(object):
         self.queue = 'default'
         self.timeout = None
         self.result_ttl = None
+        self.at_front = False
         # Assign all the arguments to attributes
         config = config_from_environment('OORQ', **kwargs)
         for arg, value in config.items():
@@ -62,7 +63,8 @@ class job(object):
                     depends_on=current_job,
                     result_ttl=self.result_ttl,
                     args=job_args,
-                    kwargs=job_kwargs
+                    kwargs=job_kwargs,
+                    at_front=self.at_front
                 )
                 set_hash_job(job)
                 log('Enqueued job (id:%s) on queue %s: [%s] pool(%s).%s%s'
