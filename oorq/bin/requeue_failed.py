@@ -15,7 +15,7 @@ use_connection(redis_conn)
 fq = FailedJobRegistry()
 pq = Queue(name=PERMANENT_FAILED)
 
-for job in pq.failed_job_registry:
+for job in fq.failed_job_registry:
     job.meta.setdefault('attempts', 0)
     if job.meta['attempts'] > MAX_ATTEMPTS:
         print "Job %s %s attempts. MAX ATTEMPTS %s limit exceeded on %s" % (
