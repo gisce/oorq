@@ -7,7 +7,8 @@ import traceback
 from datetime import datetime
 from math import ceil
 
-from rq import get_failed_queue, get_current_job
+from rq import get_current_job
+from rq.registry import FailedJobRegistry
 from rq.job import Job
 from .exceptions import *
 from .oorq import StoredJobsPool, setup_redis_connection
@@ -113,7 +114,7 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
             failed_ids.append(exe_id)
     if failed_ids:
         # Create a new job and enqueue to failed queue
-        fq = get_failed_queue()
+        fq = FailedJobRegistry()
         args[0] = failed_ids
         exc_info = ''.join(traceback.format_exception(*sys.exc_info()))
         job_args = (conf_attrs, dbname, uid, obj, method) + tuple(args)
