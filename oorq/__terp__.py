@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "oorq",
-    "version": "1.15.1",
+    "version": "1.16.0",
     "depends": ["base"],
     "author": "Eduard Carreras",
     "category": "Base",
