@@ -469,17 +469,17 @@ class OorqJob(osv.osv):
                 id=int('%s%s' % (qi + 1, ji)),
                 jid=job.id,
                 queue=queue.name,
-                created_at=serialize_date(
+                created_at=job.created_at and serialize_date(
                     job.created_at.replace(
                         tzinfo=timezone('UTC')
                     ).astimezone(tz)
                 ),
-                enqueued_at=serialize_date(
+                enqueued_at=job.enqueued_at and serialize_date(
                     job.enqueued_at.replace(
                         tzinfo=timezone('UTC')
                     ).astimezone(tz)
                 ),
-                ended_at=serialize_date(
+                ended_at=job.ended_at and serialize_date(
                     job.ended_at.replace(
                         tzinfo=timezone('UTC')
                     ).astimezone(tz)
