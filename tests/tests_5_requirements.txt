@@ -1,7 +1,7 @@
 Python-Chart
 egenix-mx-base
 lxml
-psycopg2
+psycopg2<2.8
 pydot
 pyparsing
 reportlab<3
