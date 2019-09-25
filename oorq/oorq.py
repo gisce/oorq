@@ -130,6 +130,25 @@ class JobsPool(object):
             time.sleep(0.1)
 
 
+class ProgressJobsPool(JobsPool):
+
+    def __init__(self, browse_obj=None, browse_obj_proggress_field=None, logger_description="openerp.task.progress"):
+        self.browse_obj = browse_obj
+        self.progress_field = browse_obj_proggress_field
+        self.logger_description = logger_description
+        super(ProgressJobsPool, self).__init__()
+
+    @property
+    def all_done(self):
+        logger = logging.getLogger(self.logger_description)
+        logger.info('Progress: {0}/{1} {2}%'.format(
+            len(self.done_jobs), self.num_jobs, self.progress
+        ))
+        if self.progress_field and self.browse_obj:
+            self.browse_obj.write({self.progress_field: self.progress})
+        return super(ProgressJobsPool, self).all_done
+
+
 def setup_redis_connection():
     redis_conn = get_current_connection()
     if not redis_conn:
