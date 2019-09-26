@@ -8,6 +8,7 @@ env:
     PYTHONPATH=${HOME}/src/openerp-server-${ERP}.0/bin:${HOME}/src/openerp-server-${ERP}.0/bin/addons
 services:
   - redis-server
+  - postgresql
 install:
   - if [[ $TRAVIS_PYTHON_VERSION == 2.6 ]]; then pip install unittest2; fi
   - if [[ $ERP == 5 ]]; then easy_install egenix-mx-base; fi
