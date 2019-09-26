@@ -1,5 +1,4 @@
 Python-Chart
-egenix-mx-base
 lxml
 psycopg2<2.8
 pydot
