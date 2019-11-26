@@ -1,11 +1,12 @@
 #!/usr/bin/env python
+from __future__ import print_function
 import sys
 from redis import from_url
 
 DEFAULT_REDIS_URI = 'redis://localhost:6379/0'
 
 if len(sys.argv) < 2:
-    print "RQ Worker killer\n %s worker_name [redis_uri]" % sys.argv[0]
+    print("RQ Worker killer\n %s worker_name [redis_uri]" % sys.argv[0])
     exit()
 
 worker_name = sys.argv[1]

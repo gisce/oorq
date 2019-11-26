@@ -1,6 +1,7 @@
 # -*- coding: utf8 -*-
 """OpenObject RQ.
 """
+from __future__ import absolute_import
 from rq import get_current_connection, get_current_job
 
 
@@ -12,9 +13,9 @@ if get_current_connection() and get_current_job():
 
 # Only import this if we are in OpenERP
 try:
-    import ir_cron
-    import oorq
-    import xmlrpc
-    from exceptions import *
+    from . import ir_cron
+    from . import oorq
+    from . import xmlrpc
+    from .exceptions import *
 except:
     pass

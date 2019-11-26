@@ -1,3 +1,4 @@
+from __future__ import print_function
 from osv import osv
 from oorq.decorators import job, split_job
 from oorq.decorators import create_jobs_group
@@ -47,10 +48,10 @@ class ResPartner(osv.osv):
 
     @job(queue='dependency')
     def dependency_job(self, cursor, uid, ids, vals, context=None):
-        print "First job"
+        print("First job")
         import time
         self.write_async(cursor, uid, ids, vals, context=context)
-        print "I'm working and not affected for the subjob"
+        print("I'm working and not affected for the subjob")
         time.sleep(5)
         return True
 
