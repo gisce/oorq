@@ -49,7 +49,7 @@ def set_hash_job(job):
 
 def get_queue(name, **kwargs):
     redis_conn = setup_redis_connection()
-    kwargs['async'] = AsyncMode.is_async()
+    kwargs['is_async'] = AsyncMode.is_async()
     return Queue(name, connection=redis_conn, **kwargs)
 
 
@@ -73,7 +73,7 @@ class JobsPool(object):
         self._joined = False
         self._num_jobs = 0
         self._num_jobs_done = 0
-        self.async = AsyncMode.is_async()
+        self.is_async = AsyncMode.is_async()
 
     @property
     def joined(self):
@@ -102,7 +102,7 @@ class JobsPool(object):
     def add_job(self, job):
         if self.joined:
             raise Exception("You can't add a job, the pool is joined!")
-        if not self.async:
+        if not self.is_async:
             # RQ Pull Request: #640
             fix_status_sync_job(job)
         self.pending_jobs.append(job)

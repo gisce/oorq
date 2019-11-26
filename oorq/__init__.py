@@ -12,10 +12,7 @@ if get_current_connection() and get_current_job():
     sys.argv = sys.argv[:1]
 
 # Only import this if we are in OpenERP
-try:
-    from . import ir_cron
-    from . import oorq
-    from . import xmlrpc
-    from .exceptions import *
-except:
-    pass
+from . import ir_cron
+from . import oorq
+from . import xmlrpc
+from .exceptions import *

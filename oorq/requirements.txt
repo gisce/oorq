@@ -2,3 +2,4 @@ rq==1.1.0
 rq-dashboard
 osconf
 autoworker
+six
