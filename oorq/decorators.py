@@ -92,7 +92,7 @@ class split_job(job):
             self.n_chunks = None
 
     def __call__(self, f):
-        token = sha1(f.__name__).hexdigest()
+        token = sha1(f.__name__.encode('utf-8')).hexdigest()
 
         def f_job(*args, **kwargs):
             redis_conn = setup_redis_connection()
