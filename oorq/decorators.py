@@ -23,18 +23,18 @@ class ProcessJobs(object):
     JOBS_TO_PROCESS = {}
 
     @classmethod
-    def add_job(cls, transaction_id, job, queue):
+    def add_job(cls, transaction_id, job, queue, at_font=False):
         cls.JOBS_TO_PROCESS.setdefault(transaction_id, [])
         cls.JOBS_TO_PROCESS[transaction_id].append(
-            (job, queue)
+            (job, queue, at_font)
         )
 
     @staticmethod
     def commit(cursor):
         transaction_id = id(cursor)
         jobs = ProcessJobs.JOBS_TO_PROCESS.pop(transaction_id, [])
-        for job, queue in jobs:
-            queue.enqueue_job(job)
+        for job, queue, at_front in jobs:
+            queue.enqueue_job(job, at_front=at_front)
             log('Enqueued job {} to queue {} from commit transaction {}'.format(
                 job.id, queue.name, transaction_id
             ))
@@ -102,11 +102,10 @@ class job(object):
                     kwargs=job_kwargs,
                     result_ttl=self.result_ttl,
                     depends_on=current_job,
-                    at_front=self.at_front
                 )
                 set_hash_job(job)
                 transaction_id = id(cursor)
-                ProcessJobs.add_job(transaction_id, job, q)
+                ProcessJobs.add_job(transaction_id, job, q, self.at_front)
                 log('Created job (id:%s) for queue %s: [%s] pool(%s).%s%s '
                     '(waiting to commit/rollback %s)' % (
                     job.id, q.name, dbname, osv_object, fname, args[2:],
