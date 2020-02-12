@@ -65,6 +65,7 @@ class job(object):
         self.timeout = None
         self.result_ttl = None
         self.at_front = False
+        self.on_commit = False
         # Assign all the arguments to attributes
         config = config_from_environment('OORQ', **kwargs)
         for arg, value in config.items():
@@ -96,21 +97,33 @@ class job(object):
                     conf_attrs, dbname, uid, osv_object, fname
                 ) + args[3:]
                 job_kwargs = kwargs
-                job = Job.create(
-                    execute,
-                    args=job_args,
-                    kwargs=job_kwargs,
-                    result_ttl=self.result_ttl,
-                    depends_on=current_job,
-                )
+                if self.on_commit:
+                    job = Job.create(
+                        execute,
+                        args=job_args,
+                        kwargs=job_kwargs,
+                        result_ttl=self.result_ttl,
+                        depends_on=current_job,
+                    )
+                    transaction_id = id(cursor)
+                    ProcessJobs.add_job(transaction_id, job, q, self.at_front)
+                    log('Created job (id:%s) for queue %s: [%s] pool(%s).%s%s '
+                        '(waiting to commit/rollback %s)' % (
+                            job.id, q.name, dbname, osv_object, fname, args[2:],
+                            transaction_id
+                        ))
+                else:
+                    job = q.enqueue(
+                        execute,
+                        depends_on=current_job,
+                        result_ttl=self.result_ttl,
+                        args=job_args,
+                        kwargs=job_kwargs,
+                        at_front=self.at_front
+                    )
+                    log('Enqueued job (id:%s) on queue %s: [%s] pool(%s).%s%s'
+                        % (job.id, q.name, dbname, osv_object, fname, args[2:]))
                 set_hash_job(job)
-                transaction_id = id(cursor)
-                ProcessJobs.add_job(transaction_id, job, q, self.at_front)
-                log('Created job (id:%s) for queue %s: [%s] pool(%s).%s%s '
-                    '(waiting to commit/rollback %s)' % (
-                    job.id, q.name, dbname, osv_object, fname, args[2:],
-                    transaction_id
-                ))
                 return job
             else:
                 # Remove the token
