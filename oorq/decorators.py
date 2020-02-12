@@ -101,7 +101,7 @@ class job(object):
                     args=job_args,
                     kwargs=job_kwargs,
                     result_ttl=self.result_ttl,
-                    depends_on=current_job
+                    depends_on=current_job,
                     at_front=self.at_front
                 )
                 set_hash_job(job)
