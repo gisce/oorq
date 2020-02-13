@@ -102,6 +102,7 @@ class job(object):
                         execute,
                         args=job_args,
                         kwargs=job_kwargs,
+                        timeout=self.timeout,
                         result_ttl=self.result_ttl,
                         depends_on=current_job,
                     )
