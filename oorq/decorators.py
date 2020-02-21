@@ -5,6 +5,7 @@ from multiprocessing import cpu_count
 import os
 
 from rq import Queue
+from rq.job import Job
 from rq import get_current_job
 from .oorq import setup_redis_connection, set_hash_job, AsyncMode, get_redis_url
 from osconf import config_from_environment
@@ -13,7 +14,43 @@ from .exceptions import *
 from .tasks import make_chunks, execute, isolated_execute, update_jobs_group
 from tools import config
 import netsvc
+from signals import DB_CURSOR_COMMIT, DB_CURSOR_ROLLBACK
 from autoworker import AutoWorker
+
+
+class ProcessJobs(object):
+
+    JOBS_TO_PROCESS = {}
+
+    @classmethod
+    def add_job(cls, transaction_id, job, queue, at_font=False):
+        cls.JOBS_TO_PROCESS.setdefault(transaction_id, [])
+        cls.JOBS_TO_PROCESS[transaction_id].append(
+            (job, queue, at_font)
+        )
+
+    @staticmethod
+    def commit(cursor):
+        transaction_id = id(cursor)
+        jobs = ProcessJobs.JOBS_TO_PROCESS.pop(transaction_id, [])
+        for job, queue, at_front in jobs:
+            queue.enqueue_job(job, at_front=at_front)
+            log('Enqueued job {} to queue {} from commit transaction {}'.format(
+                job.id, queue.name, transaction_id
+            ))
+
+    @staticmethod
+    def rollback(cursor):
+        transaction_id = id(cursor)
+        jobs = ProcessJobs.JOBS_TO_PROCESS.pop(transaction_id, [])
+        if jobs:
+            log('Cancelling {} jobs from rollback of transaction {}'.format(
+                len(jobs), transaction_id
+            ))
+
+
+DB_CURSOR_COMMIT.connect(ProcessJobs.commit)
+DB_CURSOR_ROLLBACK.connect(ProcessJobs.rollback)
 
 
 def log(msg, level=netsvc.LOG_INFO):
@@ -28,6 +65,7 @@ class job(object):
         self.timeout = None
         self.result_ttl = None
         self.at_front = False
+        self.on_commit = False
         # Assign all the arguments to attributes
         config = config_from_environment('OORQ', **kwargs)
         for arg, value in config.items():
@@ -45,7 +83,8 @@ class job(object):
                 args += (token,)
                 # Default arguments
                 osv_object = args[0]._name
-                dbname = args[1].dbname
+                cursor = args[1]
+                dbname = cursor.dbname
                 uid = args[2]
                 fname = f.__name__
                 q = Queue(self.queue, default_timeout=self.timeout,
@@ -58,17 +97,34 @@ class job(object):
                     conf_attrs, dbname, uid, osv_object, fname
                 ) + args[3:]
                 job_kwargs = kwargs
-                job = q.enqueue(
-                    execute,
-                    depends_on=current_job,
-                    result_ttl=self.result_ttl,
-                    args=job_args,
-                    kwargs=job_kwargs,
-                    at_front=self.at_front
-                )
+                if self.on_commit:
+                    job = Job.create(
+                        execute,
+                        args=job_args,
+                        kwargs=job_kwargs,
+                        timeout=self.timeout,
+                        result_ttl=self.result_ttl,
+                        depends_on=current_job,
+                    )
+                    transaction_id = id(cursor)
+                    ProcessJobs.add_job(transaction_id, job, q, self.at_front)
+                    log('Created job (id:%s) for queue %s: [%s] pool(%s).%s%s '
+                        '(waiting to commit/rollback %s)' % (
+                            job.id, q.name, dbname, osv_object, fname, args[2:],
+                            transaction_id
+                        ))
+                else:
+                    job = q.enqueue(
+                        execute,
+                        depends_on=current_job,
+                        result_ttl=self.result_ttl,
+                        args=job_args,
+                        kwargs=job_kwargs,
+                        at_front=self.at_front
+                    )
+                    log('Enqueued job (id:%s) on queue %s: [%s] pool(%s).%s%s'
+                        % (job.id, q.name, dbname, osv_object, fname, args[2:]))
                 set_hash_job(job)
-                log('Enqueued job (id:%s) on queue %s: [%s] pool(%s).%s%s'
-                    % (job.id, q.name, dbname, osv_object, fname, args[2:]))
                 return job
             else:
                 # Remove the token
@@ -103,7 +159,8 @@ class split_job(job):
                 args += (token,)
                 # Default arguments
                 osv_object = args[0]._name
-                dbname = args[1].dbname
+                cursor = args[1]
+                dbname = cursor.dbname
                 uid = args[2]
                 ids = args[3]
                 if not isinstance(ids, (list, tuple)):
@@ -133,7 +190,7 @@ class split_job(job):
                         conf_attrs, dbname, uid, osv_object, fname
                     ] + args[3:]
                     job_kwargs = kwargs
-                    job = q.enqueue(
+                    job = Job.create(
                         task,
                         depends_on=current_job,
                         result_ttl=self.result_ttl,
@@ -141,10 +198,14 @@ class split_job(job):
                         kwargs=job_kwargs
                     )
                     set_hash_job(job)
-                    log('Enqueued split job (%s/%s) on queue %s in %s mode '
-                        '(id:%s): [%s] pool(%s).%s%s' % (
+                    transaction_id = id(cursor)
+                    ProcessJobs.add_job(transaction_id, job, q)
+                    log('Created split job (%s/%s) on queue %s in %s mode '
+                        '(id:%s): [%s] pool(%s).%s%s '
+                        '(waiting to commit/rollback %s)' % (
                             idx + 1, len(chunks), q.name, mode, job.id,
-                            dbname, osv_object, fname, tuple(args[2:])
+                            dbname, osv_object, fname, tuple(args[2:]),
+                            transaction_id
                         )
                     )
                     jobs.append(job)

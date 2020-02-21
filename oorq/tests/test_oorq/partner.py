@@ -24,9 +24,17 @@ class ResPartner(osv.osv):
 
     def test_dependency_job(self, cursor, uid, ids, vals, context=None):
         self.dependency_job(cursor, uid, ids, vals, context=context)
+        return
+
+    def test_dependency_job_on_commit(self, cursor, uid, ids, vals, context=None):
+        self.dependency_job_on_commit(cursor, uid, ids, vals, context=context)
         return True
 
-    @job(async=True, queue='default')
+    def test_no_enqueue_on_rollback(self, cursor, uid, ids, vals, context=None):
+        self.write_async(cursor, uid, ids, vals, context)
+        raise osv.except_osv('Error', 'Test error!')
+
+    @job(async=True, queue='default', on_commit=True)
     def write_async(self, cr, user, ids, vals, context=None):
         #TODO: process before updating resource
         res = super(ResPartner, self).write(cr, user, ids, vals, context)
@@ -49,6 +57,15 @@ class ResPartner(osv.osv):
     @job(queue='dependency')
     def dependency_job(self, cursor, uid, ids, vals, context=None):
         print("First job")
+        import time
+        self.write_async(cursor, uid, ids, vals, context=context)
+        print("I'm working and not affected for the subjob")
+        time.sleep(10)
+        return True
+
+    @job(queue='dependency', on_commit=True)
+    def dependency_job_on_commit(self, cursor, uid, ids, vals, context=None):
+        print "First job"
         import time
         self.write_async(cursor, uid, ids, vals, context=context)
         print("I'm working and not affected for the subjob")
