@@ -190,24 +190,41 @@ class split_job(job):
                         conf_attrs, dbname, uid, osv_object, fname
                     ] + args[3:]
                     job_kwargs = kwargs
-                    job = Job.create(
-                        task,
-                        depends_on=current_job,
-                        result_ttl=self.result_ttl,
-                        args=job_args,
-                        kwargs=job_kwargs
-                    )
-                    set_hash_job(job)
-                    transaction_id = id(cursor)
-                    ProcessJobs.add_job(transaction_id, job, q)
-                    log('Created split job (%s/%s) on queue %s in %s mode '
-                        '(id:%s): [%s] pool(%s).%s%s '
-                        '(waiting to commit/rollback %s)' % (
-                            idx + 1, len(chunks), q.name, mode, job.id,
-                            dbname, osv_object, fname, tuple(args[2:]),
-                            transaction_id
+                    if self.on_commit:
+                        job = Job.create(
+                            task,
+                            depends_on=current_job,
+                            result_ttl=self.result_ttl,
+                            args=job_args,
+                            kwargs=job_kwargs
                         )
-                    )
+                        set_hash_job(job)
+                        transaction_id = id(cursor)
+                        ProcessJobs.add_job(transaction_id, job, q)
+                        log('Created split job (%s/%s) on queue %s in %s mode '
+                            '(id:%s): [%s] pool(%s).%s%s '
+                            '(waiting to commit/rollback %s)' % (
+                                idx + 1, len(chunks), q.name, mode, job.id,
+                                dbname, osv_object, fname, tuple(args[2:]),
+                                transaction_id
+                            )
+                        )
+                    else:
+                        job = q.enqueue(
+                            task,
+                            depends_on=current_job,
+                            result_ttl=self.result_ttl,
+                            args=job_args,
+                            kwargs=job_kwargs
+                        )
+                        set_hash_job(job)
+                        log('Created split job (%s/%s) on queue %s in %s mode '
+                            '(id:%s): [%s] pool(%s).%s%s ' % (
+                                idx + 1, len(chunks), q.name, mode, job.id,
+                                dbname, osv_object, fname, tuple(args[2:])
+                            )
+                        )
+
                     jobs.append(job)
                 return jobs
             else:
