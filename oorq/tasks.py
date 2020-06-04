@@ -156,11 +156,14 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     if worker_log_level:
         log_level = getattr(logging, worker_log_level, 'INFO')
     logging.basicConfig(level=log_level)
-    cursor = pooler.get_db(dbname).cursor()
+    sql_db.close_db(dbname)
+    conn = sql_db.db_connect(dbname)
+    cursor = conn.cursor()
     obj = netsvc.LocalService('report.'+obj)
     result, format = obj.create(cursor, uid, ids, datas, context)
     job.meta['format'] = format
     job.save()
+    cursor.close()
     sql_db.close_db(dbname)
     return result, format
 
