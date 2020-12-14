@@ -17,6 +17,7 @@ from rq import Worker, Queue, registry
 from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection, local
 from osconf import config_from_environment
+from six import text_type
 
 from .utils import CursorWrapper
 import os
@@ -41,7 +42,10 @@ def set_hash_job(job):
     @param job: Rq job
     @return: hash
     """
-    hash = sha1(job.get_call_string()).hexdigest()
+    call_string = job.get_call_string()
+    if isinstance(call_string, text_type):
+        call_string = call_string.encode('utf-8')
+    hash = sha1(call_string).hexdigest()
     job.meta['hash'] = hash
     job.save()
     return hash
