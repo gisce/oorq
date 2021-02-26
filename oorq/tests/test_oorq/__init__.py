@@ -1,1 +1,2 @@
-import partner
+from __future__ import absolute_import
+from . import partner

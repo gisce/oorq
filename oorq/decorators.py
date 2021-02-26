@@ -60,7 +60,7 @@ def log(msg, level=netsvc.LOG_INFO):
 
 class job(object):
     def __init__(self, *args, **kwargs):
-        self.async = AsyncMode.is_async()
+        self.is_async = AsyncMode.is_async()
         self.queue = 'default'
         self.timeout = None
         self.result_ttl = None
@@ -72,7 +72,7 @@ class job(object):
             setattr(self, arg, value)
 
     def __call__(self, f):
-        token = sha1(f.__name__).hexdigest()
+        token = sha1(f.__name__.encode('utf-8')).hexdigest()
 
         def f_job(*args, **kwargs):
             redis_conn = setup_redis_connection()
@@ -88,7 +88,7 @@ class job(object):
                 uid = args[2]
                 fname = f.__name__
                 q = Queue(self.queue, default_timeout=self.timeout,
-                          connection=redis_conn, async=async_mode)
+                          connection=redis_conn, is_async=async_mode)
                 # Pass OpenERP server config to the worker
                 conf_attrs = dict(
                     [(attr, value) for attr, value in config.options.items()]
@@ -148,13 +148,13 @@ class split_job(job):
             self.n_chunks = None
 
     def __call__(self, f):
-        token = sha1(f.__name__).hexdigest()
+        token = sha1(f.__name__.encode('utf-8')).hexdigest()
 
         def f_job(*args, **kwargs):
             redis_conn = setup_redis_connection()
             current_job = get_current_job()
-            async = self.async and AsyncMode.is_async()
-            if not args[-1] == token and async:
+            is_async = self.is_async and AsyncMode.is_async()
+            if not args[-1] == token and is_async:
                 # Add the token as a last argument
                 args += (token,)
                 # Default arguments
@@ -168,7 +168,7 @@ class split_job(job):
                 
                 fname = f.__name__
                 q = Queue(self.queue, default_timeout=self.timeout,
-                          connection=redis_conn, async=self.async)
+                          connection=redis_conn, is_async=self.is_async)
                 # Pass OpenERP server configuration to the worker
                 conf_attrs = dict(
                     [(attr, value) for attr, value in config.options.items()]

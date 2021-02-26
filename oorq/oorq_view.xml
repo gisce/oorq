@@ -4,6 +4,7 @@
         <!-- Base menu -->
         <menuitem id="menu_oorq" name="OpenObject Redis Queue" parent="base.menu_administration"/>
         <!-- Worker -->
+        <menuitem id="menu_oorq_workers" name="Workers" parent="menu_oorq"/>
         <record id="view_oorq_worker_tree" model="ir.ui.view">
             <field name="name">oorq.worker.tree</field>
             <field name="model">oorq.worker</field>
@@ -11,6 +12,7 @@
             <field name="arch" type="xml">
                 <tree string="Connected Workers">
                     <field name="name"/>
+                    <field name="wclass"/>
                     <field name="queues"/>
                     <field name="state"/>
                     <field name="total_working_time"/>
@@ -30,8 +32,9 @@
             <field name="auto_refresh">10</field>
             <field name="view_id" ref="view_oorq_worker_tree"/>
         </record>
-        <menuitem id="menu_oorq_worker" action="action_orq_worker_tree" parent="menu_oorq"/>
+        <menuitem id="menu_oorq_worker" action="action_orq_worker_tree" parent="menu_oorq_workers"/>
         <!-- Queue -->
+        <menuitem id="menu_oorq_queues" name="Queues" parent="menu_oorq"/>
         <record id="view_oorq_queue_tree" model="ir.ui.view">
             <field name="name">oorq.queue.tree</field>
             <field name="model">oorq.queue</field>
@@ -52,8 +55,103 @@
             <field name="auto_refresh">10</field>
             <field name="view_id" ref="view_oorq_queue_tree"/>
         </record>
-        <menuitem id="menu_oorq_queue" action="action_orq_queue_tree" parent="menu_oorq"/>
+        <menuitem id="menu_oorq_queue" action="action_orq_queue_tree" parent="menu_oorq_queues"/>
+        <!-- Registries -->
+        <menuitem id="menu_oorq_registries"  parent="menu_oorq" name="Registries"/>
+        <record id="view_oorq_registry_tree" model="ir.ui.view">
+            <field name="name">oorq.registry.tree</field>
+            <field name="model">oorq.registry</field>
+            <field name="type">tree</field>
+            <field name="arch" type="xml">
+                <tree string="Registry">
+                    <field name="name"/>
+                    <field name="n_jobs"/>
+                    <field name="queue"/>
+                </tree>
+            </field>
+        </record>
+        <!-- Failed registry -->
+        <record id="view_oorq_registry_failed_tree" model="ir.ui.view">
+            <field name="name">oorq.registry.failed.tree</field>
+            <field name="model">oorq.registry.failed</field>
+            <field name="type">tree</field>
+            <field name="inherit_id" ref="view_oorq_registry_tree"/>
+            <field name="extend">1</field>
+            <field name="arch" type="xml">
+                <xpath expr="//tree"/>
+            </field>
+        </record>
+        <record id="action_orq_registry_failed_tree" model="ir.actions.act_window">
+            <field name="name">Failed registry</field>
+            <field name="res_model">oorq.registry.failed</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree</field>
+            <field name="auto_refresh">10</field>
+            <field name="view_id" ref="view_oorq_registry_failed_tree"/>
+        </record>
+        <menuitem id="menu_oorq_registry_failed" action="action_orq_registry_failed_tree" parent="menu_oorq_registries"/>
+        <!-- Started registry -->
+        <record id="view_oorq_registry_started_tree" model="ir.ui.view">
+            <field name="name">oorq.registry.started.tree</field>
+            <field name="model">oorq.registry.started</field>
+            <field name="type">tree</field>
+            <field name="inherit_id" ref="view_oorq_registry_tree"/>
+            <field name="extend">1</field>
+            <field name="arch" type="xml">
+                <xpath expr="//tree"/>
+            </field>
+        </record>
+        <record id="action_orq_registry_started_tree" model="ir.actions.act_window">
+            <field name="name">Started registry</field>
+            <field name="res_model">oorq.registry.started</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree</field>
+            <field name="auto_refresh">10</field>
+            <field name="view_id" ref="view_oorq_registry_started_tree"/>
+        </record>
+        <menuitem id="menu_oorq_registry_started" action="action_orq_registry_started_tree" parent="menu_oorq_registries"/>
+        <!-- Finished registry -->
+        <record id="view_oorq_registry_finished_tree" model="ir.ui.view">
+            <field name="name">oorq.registry.finished.tree</field>
+            <field name="model">oorq.registry.finished</field>
+            <field name="type">tree</field>
+            <field name="inherit_id" ref="view_oorq_registry_tree"/>
+            <field name="extend">1</field>
+            <field name="arch" type="xml">
+                <xpath expr="//tree"/>
+            </field>
+        </record>
+        <record id="action_orq_registry_finished_tree" model="ir.actions.act_window">
+            <field name="name">Finished registry</field>
+            <field name="res_model">oorq.registry.finished</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree</field>
+            <field name="auto_refresh">10</field>
+            <field name="view_id" ref="view_oorq_registry_finished_tree"/>
+        </record>
+        <menuitem id="menu_oorq_registry_finished" action="action_orq_registry_finished_tree" parent="menu_oorq_registries"/>
+        <!-- Deferred registry -->
+        <record id="view_oorq_registry_deferred_tree" model="ir.ui.view">
+            <field name="name">oorq.registry.deferred.tree</field>
+            <field name="model">oorq.registry.deferred</field>
+            <field name="type">tree</field>
+            <field name="inherit_id" ref="view_oorq_registry_tree"/>
+            <field name="extend">1</field>
+            <field name="arch" type="xml">
+                <xpath expr="//tree"/>
+            </field>
+        </record>
+        <record id="action_orq_registry_deferred_tree" model="ir.actions.act_window">
+            <field name="name">Deferred registry</field>
+            <field name="res_model">oorq.registry.deferred</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree</field>
+            <field name="auto_refresh">10</field>
+            <field name="view_id" ref="view_oorq_registry_deferred_tree"/>
+        </record>
+        <menuitem id="menu_oorq_registry_deferred" action="action_orq_registry_deferred_tree" parent="menu_oorq_registries"/>
         <!-- Job -->
+        <menuitem id="menu_oorq_jobs"  parent="menu_oorq" name="Jobs"/>
         <record id="view_oorq_job_form" model="ir.ui.view">
             <field name="name">oorq.job.form</field>
             <field name="model">oorq.job</field>
@@ -65,6 +163,7 @@
                     <group colspan="2" col="2">
                         <field name="queue"/>
                         <field name="origin"/>
+                        <field name="status"/>
                     </group>
                     <group col="2" colspan="2">
                         <field name="created_at"/>
@@ -83,8 +182,8 @@
                         </page>
                     </notebook>
                     <group string="Actions" colspan="4" col="4">
-                        <button string="Cancel" name="cancel" type="object" context="{'jid': jid}" icon="gtk-cancel"/>
-                        <button string="Requeue" name="requeue" type="object" context="{'jid': jid}" icon="gtk-redo"/>
+                        <button string="Cancel" name="cancel" type="object" context="{'jid': jid}" icon="gtk-cancel" attrs="{'invisible': [('status','=','finished')]}"/>
+                        <button string="Requeue" name="requeue" type="object" context="{'jid': jid}" icon="gtk-redo" attrs="{'invisible':[('status','!=','failed')]}"/>
                     </group>
                 </form>
             </field>
@@ -96,6 +195,7 @@
             <field name="arch" type="xml">
                 <tree string="Active jobs">
                     <field name="jid"/>
+                    <field name="status"/>
                     <field name="queue"/>
                     <field name="created_at"/>
                     <field name="enqueued_at"/>
@@ -115,7 +215,7 @@
             <field name="auto_refresh">10</field>
             <field name="view_id" ref="view_oorq_job_tree"/>
         </record>
-        <menuitem id="menu_oorq_job" action="action_orq_job_tree" parent="menu_oorq"/>
+        <menuitem id="menu_oorq_job" action="action_orq_job_tree" parent="menu_oorq_jobs"/>
         <!-- Failed jobs -->
         <record id="action_orq_failed_job_tree" model="ir.actions.act_window">
             <field name="name">Failed jobs</field>
@@ -123,10 +223,43 @@
             <field name="view_type">form</field>
             <field name="view_mode">tree,form</field>
             <field name="auto_refresh">10</field>
-            <field name="context">{'queue': 'failed'}</field>
+            <field name="context">{'registry': 'failed'}</field>
             <field name="view_id" ref="view_oorq_job_tree"/>
         </record>
-        <menuitem id="menu_oorq_failed_job" action="action_orq_failed_job_tree" parent="menu_oorq"/>
+        <menuitem id="menu_oorq_failed_job" action="action_orq_failed_job_tree" parent="menu_oorq_jobs"/>
+        <!-- Finished jobs -->
+        <record id="action_orq_finished_job_tree" model="ir.actions.act_window">
+            <field name="name">Finished jobs</field>
+            <field name="res_model">oorq.job</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree,form</field>
+            <field name="auto_refresh">10</field>
+            <field name="context">{'registry': 'finished'}</field>
+            <field name="view_id" ref="view_oorq_job_tree"/>
+        </record>
+        <menuitem id="menu_oorq_finished_job" action="action_orq_finished_job_tree" parent="menu_oorq_jobs"/>
+        <!-- Started jobs -->
+        <record id="action_orq_started_job_tree" model="ir.actions.act_window">
+            <field name="name">Started jobs</field>
+            <field name="res_model">oorq.job</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree,form</field>
+            <field name="auto_refresh">10</field>
+            <field name="context">{'registry': 'started'}</field>
+            <field name="view_id" ref="view_oorq_job_tree"/>
+        </record>
+        <menuitem id="menu_oorq_started_job" action="action_orq_started_job_tree" parent="menu_oorq_jobs"/>
+        <!-- Deferred jobs -->
+        <record id="action_orq_deferred_job_tree" model="ir.actions.act_window">
+            <field name="name">Deferred jobs</field>
+            <field name="res_model">oorq.job</field>
+            <field name="view_type">form</field>
+            <field name="view_mode">tree,form</field>
+            <field name="auto_refresh">10</field>
+            <field name="context">{'registry': 'deferred'}</field>
+            <field name="view_id" ref="view_oorq_job_tree"/>
+        </record>
+        <menuitem id="menu_oorq_deferred_job" action="action_orq_deferred_job_tree" parent="menu_oorq_jobs"/>
         <!-- OORQ Jobs Group -->
         <record model="ir.ui.view" id="view_oorq_jobs_group_form">
             <field name="name">oorq_jobs_group.form</field>

@@ -1,3 +1,6 @@
+from rq.registry import FailedJobRegistry
+
+
 class CursorWrapper(object):
     def __init__(self, cursor):
         self.cursor = cursor
@@ -9,3 +12,7 @@ class CursorWrapper(object):
         if exc_type:
             self.cursor.rollback()
         self.cursor.close()
+
+
+def get_failed_queue():
+    return FailedJobRegistry()

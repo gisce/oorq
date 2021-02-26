@@ -1,5 +1,5 @@
 # coding=utf-8
-import xmlrpclib
+from six.moves import xmlrpc_client
 from rq.job import Job
 
 
@@ -9,4 +9,4 @@ def dump_job(marshaller, value, write):
     write("</string></value>\n")
 
 
-xmlrpclib.Marshaller.dispatch[Job] = dump_job
+xmlrpc_client.Marshaller.dispatch[Job] = dump_job
