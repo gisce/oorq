@@ -6,22 +6,33 @@ from tools.translate import _
 import pooler
 
 import time
+import inspect
 from datetime import datetime, timedelta
 import logging
 from hashlib import sha1
 from redis import Redis, from_url
 from pytz import timezone
-from rq.job import JobStatus
-from rq import Worker, Queue
+from rq.job import JobStatus, Job
+from rq import Worker, Queue, registry
 from rq import cancel_job, requeue_job
 from rq import push_connection, get_current_connection, local
 from osconf import config_from_environment
+from six import text_type
 
 from .utils import CursorWrapper
 import os
 
+
+REGISTRY_MAP = {
+    'failed': registry.FailedJobRegistry,
+    'started': registry.StartedJobRegistry,
+    'finished': registry.FinishedJobRegistry,
+    'deferred': registry.DeferredJobRegistry
+}
+
+
 def oorq_log(msg, level=logging.INFO):
-    logger = logging.getLogger('oorq')
+    logger = logging.getLogger('openerp.oorq')
     logger.log(level, msg)
 
 
@@ -31,7 +42,10 @@ def set_hash_job(job):
     @param job: Rq job
     @return: hash
     """
-    hash = sha1(job.get_call_string()).hexdigest()
+    call_string = job.get_call_string()
+    if isinstance(call_string, text_type):
+        call_string = call_string.encode('utf-8')
+    hash = sha1(call_string).hexdigest()
     job.meta['hash'] = hash
     job.save()
     return hash
@@ -39,7 +53,7 @@ def set_hash_job(job):
 
 def get_queue(name, **kwargs):
     redis_conn = setup_redis_connection()
-    kwargs['async'] = AsyncMode.is_async()
+    kwargs['is_async'] = AsyncMode.is_async()
     return Queue(name, connection=redis_conn, **kwargs)
 
 
@@ -63,7 +77,7 @@ class JobsPool(object):
         self._joined = False
         self._num_jobs = 0
         self._num_jobs_done = 0
-        self.async = AsyncMode.is_async()
+        self.is_async = AsyncMode.is_async()
 
     @property
     def joined(self):
@@ -92,7 +106,7 @@ class JobsPool(object):
     def add_job(self, job):
         if self.joined:
             raise Exception("You can't add a job, the pool is joined!")
-        if not self.async:
+        if not self.is_async:
             # RQ Pull Request: #640
             fix_status_sync_job(job)
         self.pending_jobs.append(job)
@@ -241,6 +255,7 @@ class OorqWorker(osv.osv):
 
     _columns = {
         'name': fields.char('Worker name', size=64),
+        'wclass': fields.char('Worker class', size=64),
         'queues': fields.char('Queues', size=256),
         'state': fields.char('State', size=32),
         'total_working_time': fields.char('Total working time', size=32),
@@ -260,6 +275,7 @@ class OorqWorker(osv.osv):
         workers = [dict(
             id=worker.pid,
             name=worker.name,
+            wclass='{}.{}'.format(worker.__module__, worker.__class__.__name__),
             queues=', '.join([q.name for q in worker.queues]),
             state=worker.state,
             total_working_time=str(timedelta(
@@ -267,12 +283,12 @@ class OorqWorker(osv.osv):
             )),
             successful_job_count=worker.successful_job_count,
             failed_job_count=worker.failed_job_count,
-            last_heartbeat=worker.last_heartbeat.replace(
+            last_heartbeat=worker.last_heartbeat and worker.last_heartbeat.replace(
                 tzinfo=timezone('UTC')
-            ).astimezone(tz).strftime('%Y-%m-%d %H:%M:%S'),
-            birth_date=worker.birth_date.replace(
+            ).astimezone(tz).strftime('%Y-%m-%d %H:%M:%S') or False,
+            birth_date=worker.birth_date and worker.birth_date.replace(
                 tzinfo=timezone('UTC')
-            ).astimezone(tz).strftime('%Y-%m-%d %H:%M:%S'),
+            ).astimezone(tz).strftime('%Y-%m-%d %H:%M:%S') or False,
             current_job_id=worker.get_current_job_id() or False,
             __last_updadate=False
         ) for worker in Worker.all()]
@@ -289,7 +305,7 @@ class OorqQueue(osv.osv):
     _auto = False
 
     _columns = {
-        'name': fields.char('Worker name', size=64),
+        'name': fields.char('Queue name', size=64),
         'n_jobs': fields.integer('Number of jobs'),
         'is_empty': fields.boolean('Is empty'),
     }
@@ -310,6 +326,78 @@ class OorqQueue(osv.osv):
 OorqQueue()
 
 
+class OorqRegistry(osv.osv):
+    _name = 'oorq.registry'
+    _inherit = 'oorq.base'
+    _auto = False
+    registry = None
+
+    _columns = {
+        'name': fields.char('Registry name', size=64),
+        'n_jobs': fields.integer('Number of jobs'),
+        'queue': fields.char('Queue name', size=64),
+    }
+
+    def read(self, cursor, uid, ids, fields=None, context=None):
+        """Show connected workers.
+        """
+        setup_redis_connection()
+        registries = []
+        for idx, queue in enumerate(Queue.all()):
+            reg = self.registry(name=queue.name)
+            assert isinstance(reg, registry.BaseRegistry)
+            registries.append({
+                'id': idx,
+                'name': reg.name,
+                'n_jobs': reg.count,
+                'queue': reg.name
+            })
+        return registries
+
+
+OorqRegistry()
+
+
+class OorqRegistryFailed(osv.osv):
+    _name = 'oorq.registry.failed'
+    _auto = False
+    _inherit = 'oorq.registry'
+    registry = registry.FailedJobRegistry
+
+
+OorqRegistryFailed()
+
+
+class OorqRegistryStarted(osv.osv):
+    _name = 'oorq.registry.started'
+    _auto = False
+    _inherit = 'oorq.registry'
+    registry = registry.StartedJobRegistry
+
+
+OorqRegistryStarted()
+
+
+class OorqRegistryFinished(osv.osv):
+    _name = 'oorq.registry.finished'
+    _auto = False
+    _inherit = 'oorq.registry'
+    registry = registry.FinishedJobRegistry
+
+
+OorqRegistryFinished()
+
+
+class OorqRegistryDeferred(osv.osv):
+    _name = 'oorq.registry.deferred'
+    _auto = False
+    _inherit = 'oorq.registry'
+    registry = registry.DeferredJobRegistry
+
+
+OorqRegistryDeferred()
+
+
 class OorqJob(osv.osv):
     """OpenObject RQ Job.
     """
@@ -326,21 +414,32 @@ class OorqJob(osv.osv):
         'origin': fields.char('Origin', size=32),
         'result': fields.text('Result'),
         'exc_info': fields.text('Exception info'),
-        'description': fields.text('Description')
+        'description': fields.text('Description'),
+        'status': fields.selection([
+            ('queued', 'Queued'),
+            ('finished', 'Finished'),
+            ('failed', 'Failed'),
+            ('started', 'Started'),
+            ('deferred', 'Deferred')
+        ], 'Status')
     }
 
     def cancel(self, cursor, uid, ids, context=None):
         if not context:
             context = {}
         if 'jid' in context:
-            cancel_job(context['jid'])
+            job = Job.fetch(context['jid'])
+            oorq_log('Canceling job {}'.format(context['jid']))
+            job.cancel()
+            job.delete()
         return True
 
     def requeue(self, cursor, uid, ids, context=None):
         if not context:
             context = {}
+        conn = setup_redis_connection()
         if 'jid' in context:
-            requeue_job(context['jid'])
+            requeue_job(context['jid'], connection=conn)
         return True
 
     def read(self, cursor, uid, ids, fields=None, context=None):
@@ -357,21 +456,46 @@ class OorqJob(osv.osv):
                 queues.remove(Queue('failed'))
             except ValueError:
                 pass
-        jobs = []
+        result = []
+        user = self.pool.get('res.users').read(cursor, uid, uid, ['context_tz'])
+        tz = timezone(user['context_tz'] or 'UTC')
         for qi, queue in enumerate(queues):
-            jobs += [dict(
+            if 'registry' in context:
+                reg = REGISTRY_MAP.get(context['registry'])
+                if reg is None:
+                    raise osv.except_osv('Error', 'Regitry {} not valid'.format(
+                        context['registry']
+                    ))
+                jobs = [Job.fetch(jid) for jid in reg(queue.name).get_job_ids()]
+            else:
+                jobs = queue.jobs
+            result += [dict(
                 id=int('%s%s' % (qi + 1, ji)),
                 jid=job.id,
                 queue=queue.name,
-                created_at=serialize_date(job.created_at),
-                enqueued_at=serialize_date(job.enqueued_at),
-                ended_at=serialize_date(job.ended_at),
+                created_at=job.created_at and serialize_date(
+                    job.created_at.replace(
+                        tzinfo=timezone('UTC')
+                    ).astimezone(tz)
+                ),
+                enqueued_at=job.enqueued_at and serialize_date(
+                    job.enqueued_at.replace(
+                        tzinfo=timezone('UTC')
+                    ).astimezone(tz)
+                ),
+                ended_at=job.ended_at and serialize_date(
+                    job.ended_at.replace(
+                        tzinfo=timezone('UTC')
+                    ).astimezone(tz)
+                ),
                 origin=job.origin or False,
-                result=job._result or False,
+                result=str(job._result) or False,
                 exc_info=job.exc_info or False,
+                status=job.get_status(),
                 description=job.description or False)
-                     for ji, job in enumerate(queue.jobs)]
-        return jobs
+                     for ji, job in enumerate(jobs)]
+        return result
+
 
 OorqJob()
 

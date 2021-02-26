@@ -7,10 +7,11 @@ import traceback
 from datetime import datetime
 from math import ceil
 
-from rq import get_failed_queue, get_current_job
+from rq import get_current_job
 from rq.job import Job
 from .exceptions import *
 from .oorq import StoredJobsPool, setup_redis_connection, AsyncMode
+from .utils import get_failed_queue
 
 
 def make_chunks(ids, n_chunks=None, size=None):
@@ -122,7 +123,7 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         job_args = (conf_attrs, dbname, uid, obj, method) + tuple(args)
         job = Job.create(isolated_execute, job_args)
         job.origin = get_current_job().origin
-        fq.quarantine(job, exc_info)
+        fq.add(job, exc_string=exc_info)
         logger.warning('Enqueued failed job (id:%s): [%s] pool(%s).%s%s'
                            % (job.id, dbname, obj, method, tuple(args)))
     logger.info('Time elapsed: %s' % (datetime.now() - start))
