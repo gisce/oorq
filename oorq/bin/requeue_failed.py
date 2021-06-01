@@ -22,6 +22,8 @@ for queue in all_queues:
     fq = FailedJobRegistry(queue.name)
     for job_id in fq.get_job_ids():
         job = Job.fetch(job_id)
+        if not job.meta.get('requeue', True):
+            continue
         job.meta.setdefault('attempts', 0)
         if job.meta['attempts'] > MAX_ATTEMPTS:
             print("Job %s %s attempts. MAX ATTEMPTS %s limit exceeded on %s" % (
