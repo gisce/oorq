@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from hashlib import sha1
 from multiprocessing import cpu_count
+from collections import namedtuple
 import os
 
 from rq import Queue
@@ -14,8 +15,14 @@ from .exceptions import *
 from .tasks import make_chunks, execute, isolated_execute, update_jobs_group
 from tools import config
 import netsvc
-from signals import DB_CURSOR_COMMIT, DB_CURSOR_ROLLBACK
+from signals import (
+    DB_CURSOR_COMMIT, DB_CURSOR_ROLLBACK, DB_CURSOR_ROLLBACK_SAVEPOINT,
+    DB_CURSOR_SAVEPOINT
+)
 from autoworker import AutoWorker
+
+
+JobToProcess = namedtuple('JobToProcess', ['job', 'queue', 'at_front'])
 
 
 class ProcessJobs(object):
@@ -26,8 +33,14 @@ class ProcessJobs(object):
     def add_job(cls, transaction_id, job, queue, at_font=False):
         cls.JOBS_TO_PROCESS.setdefault(transaction_id, [])
         cls.JOBS_TO_PROCESS[transaction_id].append(
-            (job, queue, at_font)
+            JobToProcess(job, queue, at_font)
         )
+
+    @staticmethod
+    def savepoint(cursor, savepoint):
+        transaction_id = id(cursor)
+        ProcessJobs.JOBS_TO_PROCESS.setdefault(transaction_id, [])
+        ProcessJobs.JOBS_TO_PROCESS[transaction_id].append(savepoint)
 
     @staticmethod
     def commit(cursor):
@@ -48,9 +61,26 @@ class ProcessJobs(object):
                 len(jobs), transaction_id
             ))
 
+    @staticmethod
+    def rollback_savepoint(cursor, savepoint):
+        transaction_id = id(cursor)
+        try:
+            index = ProcessJobs.JOBS_TO_PROCESS[transaction_id].index(savepoint)
+            jobs = [
+                j for j in ProcessJobs.JOBS_TO_PROCESS[transaction_id][index:]
+                if isinstance(j, JobToProcess)
+            ]
+            log('Cancelling {} jobs from rollback to savepoint {} of '
+                'transaction {}'.format(len(jobs), savepoint, transaction_id))
+            del ProcessJobs.JOBS_TO_PROCESS[transaction_id][index:]
+        except ValueError:
+            pass
 
+
+DB_CURSOR_SAVEPOINT.connect(ProcessJobs.savepoint)
 DB_CURSOR_COMMIT.connect(ProcessJobs.commit)
 DB_CURSOR_ROLLBACK.connect(ProcessJobs.rollback)
+DB_CURSOR_ROLLBACK_SAVEPOINT.connect(ProcessJobs.rollback_savepoint)
 
 
 def log(msg, level=netsvc.LOG_INFO):
