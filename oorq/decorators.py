@@ -45,12 +45,17 @@ class ProcessJobs(object):
     @staticmethod
     def commit(cursor):
         transaction_id = id(cursor)
-        jobs = ProcessJobs.JOBS_TO_PROCESS.pop(transaction_id, [])
+        jobs = [
+            j for j in ProcessJobs.JOBS_TO_PROCESS.pop(transaction_id, [])
+            if isinstance(j, JobToProcess)
+        ]
         for job, queue, at_front in jobs:
             queue.enqueue_job(job, at_front=at_front)
             log('Enqueued job {} to queue {} from commit transaction {}'.format(
                 job.id, queue.name, transaction_id
             ))
+        if transaction_id in ProcessJobs.JOBS_TO_PROCESS:
+            del ProcessJobs.JOBS_TO_PROCESS[transaction_id]
 
     @staticmethod
     def rollback(cursor):
