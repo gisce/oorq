@@ -40,6 +40,9 @@ class ProcessJobs(object):
     def savepoint(cursor, savepoint):
         transaction_id = id(cursor)
         ProcessJobs.JOBS_TO_PROCESS.setdefault(transaction_id, [])
+        log('Added savepoint {} to transaction {}'.format(
+            savepoint, transaction_id
+        ))
         ProcessJobs.JOBS_TO_PROCESS[transaction_id].append(savepoint)
 
     @staticmethod
