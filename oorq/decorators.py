@@ -66,7 +66,7 @@ class job(object):
         self.result_ttl = None
         self.at_front = False
         self.on_commit = False
-        self.requeue = True
+        self.requeue = False
         # Assign all the arguments to attributes
         config = config_from_environment('OORQ', **kwargs)
         for arg, value in config.items():
