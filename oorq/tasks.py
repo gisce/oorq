@@ -57,7 +57,10 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     osv_ = osv.osv.osv_pool()
     db, pool = pooler.get_db_and_pool(dbname)
     logging.disable(0)
-    logger = logging.getLogger(__name__)
+    if not pool._ready and not AsyncMode.is_async():
+        logger = logging.getLogger(__name__)
+    else:
+        logger = logging.getLogger()
     logger.handlers = []
     log_level = tools.config['log_level']
     worker_log_level = os.getenv('LOG', False)
