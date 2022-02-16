@@ -57,7 +57,7 @@ jobs:
         pushd ${HOME}/src
         curl -L https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xvzf -
         cd ${HOME}/src/openerp-server-${ERP}.0/bin
-        psql -h $OORQ_DB_HOST -w $POSTGRES_PASSWORD -c "create database $OORQ_DATABASE;" -U postgres
+        psql -h $OORQ_DB_HOST -W $POSTGRES_PASSWORD -c "create database $OORQ_DATABASE;" -U postgres
         python openerp-server.py --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --db_pasword=$POSTGRES_PASSWORD --init=all --stop-after-init
         popd
     - name: Run test
