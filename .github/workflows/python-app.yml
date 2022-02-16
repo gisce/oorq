@@ -16,7 +16,6 @@ env:
   OORQ_DB_HOST: localhost
   OORQ_ADDONS_PATH: ${HOME}/src/openerp-server-${ERP}.0/bin/addons
   PYTHONPATH: ${HOME}/src/openerp-server-${ERP}.0/bin:${HOME}/src/openerp-server-${ERP}.0/bin/addons
-  POSTGRES_PASSWORD: postgres
 
 jobs:
   build:
@@ -27,22 +26,12 @@ jobs:
       # For example, pypy2 and pypy3
       matrix:
         python-version: ["2.7"]
-    services:
-      postgres:
-        image: postgres:latest
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
     - uses: actions/checkout@v2
+    - name: Start postgres
+      run: |
+        sudo systemctl start postgresql.service
+        pg_isready
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
@@ -57,8 +46,8 @@ jobs:
         pushd ${HOME}/src
         curl -L https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xvzf -
         cd ${HOME}/src/openerp-server-${ERP}.0/bin
-        sudo -u postgres psql -U postgres -h $OORQ_DB_HOST -W $POSTGRES_PASSWORD -c "create database $OORQ_DATABASE;"
-        python openerp-server.py --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --db_password=$POSTGRES_PASSWORD --init=all --stop-after-init
+        sudo -u postgres psql -U postgres -h $OORQ_DB_HOST -c "create database $OORQ_DATABASE;"
+        python openerp-server.py --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
         popd
     - name: Run test
       run: |
