@@ -16,7 +16,6 @@ env:
   OORQ_DB_HOST: localhost
   OORQ_ADDONS_PATH: ${HOME}/src/openerp-server-${ERP}.0/bin/addons
   PYTHONPATH: ${HOME}/src/openerp-server-${ERP}.0/bin:${HOME}/src/openerp-server-${ERP}.0/bin/addons
-  POSTGRES_PASSWORD: postgres
 
 jobs:
   build:
@@ -32,7 +31,6 @@ jobs:
         image: postgres:latest
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
         ports:
           - 5432:5432
@@ -57,8 +55,8 @@ jobs:
         pushd ${HOME}/src
         curl -L https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xvzf -
         cd ${HOME}/src/openerp-server-${ERP}.0/bin
-        psql -U postgres -h $OORQ_DB_HOST -W $POSTGRES_PASSWORD -c "create database $OORQ_DATABASE;"
-        python openerp-server.py --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --db_password=$POSTGRES_PASSWORD --init=all --stop-after-init
+        psql -U postgres -h $OORQ_DB_HOST -c "create database $OORQ_DATABASE;"
+        python openerp-server.py --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
         popd
     - name: Run test
       run: |
