@@ -29,6 +29,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Start postgres
+      run: |
+        sudo systemctl start postgresql.service
+        pg_isready
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
