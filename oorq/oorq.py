@@ -164,20 +164,31 @@ def setup_redis_connection():
             oorq_log('Connecting to redis using defaults')
             redis_conn = Redis()
         push_connection(redis_conn)
-    os.environ['AUTOWORKER_REDIS_URL'] = get_redis_url(redis_conn)
+    ssl_redis_connection = config.get('ssl_redis_connection', False) or False
+    autoworker_redis_url = config.get('autoworker_redis_url', False) or False
+    os.environ['AUTOWORKER_REDIS_URL'] = (
+            autoworker_redis_url or get_redis_url(redis_conn, ssl_redis_connection=ssl_redis_connection)
+    )
     return redis_conn
 
 
-def get_redis_url(redis_conn):
+def get_redis_url(redis_conn, ssl_redis_connection=False):
     """
     Creates redis url from redis connection
     :param redis_conn:
+    :param ssl_redis_connection:
     :return: url on the form redis://host:port/db
     """
     if not redis_conn:
         return False
-    return 'redis://{host}:{port}/{db}'.format(
-        **redis_conn.connection_pool.connection_kwargs
+
+    if ssl_redis_connection:
+        prefix = 'rediss'
+    else:
+        prefix = 'redis'
+
+    return '{}://{host}:{port}/{db}'.format(
+        prefix, **redis_conn.connection_pool.connection_kwargs
     )
 
 def serialize_date(dt):
