@@ -13,25 +13,31 @@ env:
   ERP: 5
   OORQ_DATABASE: oerp5
   OORQ_DB_USER: postgres
+  OORQ_DB_PASSWORD: postgres
   OORQ_DB_HOST: localhost
   OORQ_ADDONS_PATH: ${HOME}/src/openerp-server-${ERP}.0/bin/addons
   PYTHONPATH: ${HOME}/src/openerp-server-${ERP}.0/bin:${HOME}/src/openerp-server-${ERP}.0/bin/addons
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     strategy:
       # You can use PyPy versions in python-version.
       # For example, pypy2 and pypy3
       matrix:
         python-version: ["2.7"]
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
-    - uses: actions/checkout@v2
-    - name: Start postgres
-      run: |
-        sudo systemctl start postgresql.service
-        pg_isready
+    - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
@@ -46,9 +52,19 @@ jobs:
         pushd ${HOME}/src
         curl -L https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xvzf -
         cd ${HOME}/src/openerp-server-${ERP}.0/bin
-        sudo -u postgres psql -U postgres -h $OORQ_DB_HOST -c "create database $OORQ_DATABASE;"
-        python openerp-server.py --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_user=$OORQ_DB_USER --init=all --stop-after-init
+        sudo -u postgres psql -U postgres -h $OORQ_DB_HOST -W $OORQ_DB_PASSWORD -c "create database $OORQ_DATABASE;"
+        python openerp-server.py --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_password=$OORQ_DB_PASSWORD --db_user=$OORQ_DB_USER --init=all --stop-after-init
         popd
+      env:
+        # The hostname used to communicate with the PostgreSQL service container
+        POSTGRES_HOST: postgres
+        # The default PostgreSQL port
+        POSTGRES_PORT: 5432
     - name: Run test
       run: |
         py.test tests/*.py
+      env:
+        # The hostname used to communicate with the PostgreSQL service container
+        POSTGRES_HOST: postgres
+        # The default PostgreSQL port
+        POSTGRES_PORT: 5432
