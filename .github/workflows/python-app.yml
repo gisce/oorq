@@ -14,7 +14,7 @@ env:
   OORQ_DATABASE: oerp5
   OORQ_DB_USER: postgres
   OORQ_DB_PASSWORD: postgres
-  OORQ_DB_HOST: postgres
+  OORQ_DB_HOST: localhost
   OORQ_ADDONS_PATH: ${HOME}/src/openerp-server-${ERP}.0/bin/addons
   PYTHONPATH: ${HOME}/src/openerp-server-${ERP}.0/bin:${HOME}/src/openerp-server-${ERP}.0/bin/addons
 
@@ -36,6 +36,9 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+        ports:
+          # Maps tcp port 5432 on service container to the host
+          - 5432:5432
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
