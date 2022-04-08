@@ -104,6 +104,7 @@ class job(object):
         self.result_ttl = None
         self.at_front = False
         self.on_commit = False
+        self.requeue = False
         # Assign all the arguments to attributes
         config = config_from_environment('OORQ', **kwargs)
         for arg, value in config.items():
@@ -135,7 +136,7 @@ class job(object):
                     conf_attrs, dbname, uid, osv_object, fname
                 ) + args[3:]
                 job_kwargs = kwargs
-                if self.on_commit:
+                if self.on_commit and async_mode:
                     job = Job.create(
                         execute,
                         args=job_args,
@@ -162,6 +163,8 @@ class job(object):
                     )
                     log('Enqueued job (id:%s) on queue %s: [%s] pool(%s).%s%s'
                         % (job.id, q.name, dbname, osv_object, fname, args[2:]))
+                job.meta['requeue'] = self.requeue
+                job.save()
                 set_hash_job(job)
                 return job
             else:
@@ -261,6 +264,8 @@ class split_job(job):
                                 idx + 1, len(chunks), q.name, mode, job.id,
                                 dbname, osv_object, fname, tuple(args[2:])
                         ))
+                    job.meta['requeue'] = self.requeue
+                    job.save()
                     set_hash_job(job)
                     jobs.append(job)
                 return jobs
