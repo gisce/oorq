@@ -98,7 +98,7 @@ class job(object):
                     conf_attrs, dbname, uid, osv_object, fname
                 ) + args[3:]
                 job_kwargs = kwargs
-                if self.on_commit:
+                if self.on_commit and async_mode:
                     job = Job.create(
                         execute,
                         args=job_args,
