@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from autoworker import AutoWorker as AutoWorkerBase
 from oorq.decorators import log
 from signals import DB_CURSOR_COMMIT, DB_CURSOR_ROLLBACK
+import os
 
 
 class AutoWorkerRegister(object):
@@ -45,8 +46,19 @@ DB_CURSOR_ROLLBACK.connect(AutoWorkerRegister.rollback)
 
 
 class AutoWorker(AutoWorkerBase):
+    def __init__(self, *args, **kwargs):
+        super(AutoWorker, self).__init__(*args, **kwargs)
+        self.auto_get_cursor = os.getenv('OORQ_AW_GET_CTX_CURSOR', None)
 
     def work(self, cursor=None):
+        if cursor is None and self.auto_get_cursor:
+            import inspect
+            frame = inspect.currentframe()
+            try:
+                context_vars = frame.f_back.f_locals
+                cursor = context_vars.get('cr', context_vars.get('cursor', None))
+            finally:
+                del frame
         if cursor is None:
             super(AutoWorker, self).work()
         else:
