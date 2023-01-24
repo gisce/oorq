@@ -29,8 +29,11 @@ class Worker(RQWorker):
 
     def request_stop(self, signum, frame):
         try:
-            from service import kill_current_threads
-            kill_current_threads(signum, frame)
+            from signals import SHUTDOWN_REQUEST
+            SHUTDOWN_REQUEST.send(signum, frame=frame, exit_code=0)
+        except TypeError:
+            # Backwards compatible
+            SHUTDOWN_REQUEST.send(signum, frame=frame)
         except ImportError:
             pass
         super(Worker, self).request_stop(signum, frame)
