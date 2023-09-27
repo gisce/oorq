@@ -325,14 +325,46 @@ class OorqQueue(osv.osv):
         """Show connected workers.
         """
         setup_redis_connection()
-        queues = [dict(
-            id=i + 1,
-            name=queue.name,
-            n_jobs=queue.count,
-            is_empty=queue.is_empty(),
-            __last_update=False
-        ) for i, queue in enumerate(Queue.all())]
-        return queues
+        queues = [queue for queue in Queue.all() if getattr(queue, 'name') in ids]
+
+        res = {}
+        for queue in queues:
+            values = {
+                'name': queue.name,
+                'n_jobs': len(queue.jobs),
+                'is_empty': queue.is_empty()
+            }
+            if fields:
+                values = {k: values[k] for k in fields}
+            res[queue.name] = values
+
+        return res
+
+    def search(self, cursor, uid, args, offset=0, limit=None, order=None,
+               context=None, count=False):
+        setup_redis_connection()
+        res = Queue.all()
+
+        for arg in args:
+            if arg:
+                column, op, value = arg
+                if op in ['=','!=']:
+                    equal = True if op == '=' else False
+                    res = [queue for queue in res if (getattr(queue, column) == value) == equal]
+
+                elif op == 'ilike':
+                    res = [queue for queue in res if str(value).lower() in str(getattr(queue, column)).lower()]
+                elif op == 'like':
+                    res = [queue for queue in res if value in getattr(queue, column)]
+
+        res = res[offset:]
+        if limit:
+            res = res[:limit]
+
+        if count:
+            return len(res)
+        else:
+            return [getattr(queue, 'name') for queue in res]
 
 OorqQueue()
 
