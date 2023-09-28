@@ -352,16 +352,14 @@ class OorqQueue(osv.osv):
         for arg in args:
             if arg:
                 column, op, value = arg
-                if op in ['=','!=']:
-                    equal = True if op == '=' else False
-                    res = [queue for queue in res if (getattr(queue, column) == value) == equal]
-
+                if op in ['=', '!=']:
+                    res = [queue for queue in res if (getattr(queue, column) == value) != ('!' in op)]
                 elif op == 'ilike':
                     res = [queue for queue in res if str(value).lower() in str(getattr(queue, column)).lower()]
                 elif op == 'like':
                     res = [queue for queue in res if value in getattr(queue, column)]
-                elif op == 'in':
-                    res = [queue for queue in res if (getattr(queue, 'name') in value)]
+                elif op in ['in', 'not in']:
+                    res = [queue for queue in res if (getattr(queue, 'name') in value) != ('not' in op)]
 
         res = res[offset:]
         if limit:
