@@ -14,5 +14,5 @@ if get_current_connection() and get_current_job():
 # Only import this if we are in OpenERP
 from . import ir_cron
 from . import oorq
-from . import xmlrpc
+from . import serializers
 from .exceptions import *
