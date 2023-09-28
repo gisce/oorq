@@ -1,20 +1,27 @@
 # coding=utf-8
+import logging
 from rq.job import Job
 from six.moves import xmlrpc_client
+from signals import APP_STARTED
+from flask import current_app
 
-try:
-    from flask import current_app
-    from flask.json import JSONEncoder as JSONEncoderBase
 
-    class JsonEncoder(JSONEncoderBase):
+logger = logging.getLogger('openerp.oorq')
+
+
+def register_json_encoder(*args, **kwargs):
+
+    class FlaskJsonEncoder(current_app.json_encoder):
         def default(self, o):
             if isinstance(o, Job):
                 return o.id
-            return super(JsonEncoder, self).default(o)
+            return super(FlaskJsonEncoder, self).default(o)
 
-    current_app.json_encoder = JsonEncoder
-except RuntimeError:
-    pass
+    logger.info('JSONEncoder registered')
+    current_app.json_encoder = FlaskJsonEncoder
+
+
+APP_STARTED.connect(register_json_encoder)
 
 
 def dump_job(marshaller, value, write):
