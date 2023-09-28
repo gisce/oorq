@@ -325,18 +325,22 @@ class OorqQueue(osv.osv):
         """Show connected workers.
         """
         setup_redis_connection()
+        if fields is None:
+            fields = []
         queues = [queue for queue in Queue.all() if getattr(queue, 'name') in ids]
 
-        res = {}
+        res = []
         for queue in queues:
             values = {
+                'id': queue.name,
                 'name': queue.name,
                 'n_jobs': len(queue.jobs),
                 'is_empty': queue.is_empty()
             }
-            if fields:
-                values = {k: values[k] for k in fields}
-            res[queue.name] = values
+            for key in list(values.keys()):
+                if key not in fields and key != 'id':
+                    values.pop(key, None)
+            res.append(values)
 
         return res
 
@@ -356,6 +360,8 @@ class OorqQueue(osv.osv):
                     res = [queue for queue in res if str(value).lower() in str(getattr(queue, column)).lower()]
                 elif op == 'like':
                     res = [queue for queue in res if value in getattr(queue, column)]
+                elif op == 'in':
+                    res = [queue for queue in res if (getattr(queue, 'name') in value)]
 
         res = res[offset:]
         if limit:
