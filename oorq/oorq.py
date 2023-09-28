@@ -325,14 +325,50 @@ class OorqQueue(osv.osv):
         """Show connected workers.
         """
         setup_redis_connection()
-        queues = [dict(
-            id=i + 1,
-            name=queue.name,
-            n_jobs=queue.count,
-            is_empty=queue.is_empty(),
-            __last_update=False
-        ) for i, queue in enumerate(Queue.all())]
-        return queues
+        if fields is None:
+            fields = []
+        queues = [queue for queue in Queue.all() if getattr(queue, 'name') in ids]
+
+        res = []
+        for queue in queues:
+            values = {
+                'id': queue.name,
+                'name': queue.name,
+                'n_jobs': len(queue.jobs),
+                'is_empty': queue.is_empty()
+            }
+            for key in list(values.keys()):
+                if key not in fields and key != 'id':
+                    values.pop(key, None)
+            res.append(values)
+
+        return res
+
+    def search(self, cursor, uid, args, offset=0, limit=None, order=None,
+               context=None, count=False):
+        setup_redis_connection()
+        res = Queue.all()
+
+        for arg in args:
+            if arg:
+                column, op, value = arg
+                if op in ['=', '!=']:
+                    res = [queue for queue in res if (getattr(queue, column) == value) != ('!' in op)]
+                elif op == 'ilike':
+                    res = [queue for queue in res if str(value).lower() in str(getattr(queue, column)).lower()]
+                elif op == 'like':
+                    res = [queue for queue in res if value in getattr(queue, column)]
+                elif op in ['in', 'not in']:
+                    res = [queue for queue in res if (getattr(queue, 'name') in value) != ('not' in op)]
+
+        res = res[offset:]
+        if limit:
+            res = res[:limit]
+
+        if count:
+            return len(res)
+        else:
+            return [getattr(queue, 'name') for queue in res]
 
 OorqQueue()
 
