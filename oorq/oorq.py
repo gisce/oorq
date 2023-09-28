@@ -277,7 +277,7 @@ class OorqWorker(osv.osv):
         'current_job_id': fields.char('Current Job Id', size=36)
     }
 
-    def read(self, cursor, uid, ids, fields=None, context=None):
+    def read(self, cursor, uid, ids, fields=None, context=None, load='_classic_read'):
         """Show connected workers.
         """
         setup_redis_connection()
@@ -321,7 +321,7 @@ class OorqQueue(osv.osv):
         'is_empty': fields.boolean('Is empty'),
     }
 
-    def read(self, cursor, uid, ids, fields=None, context=None):
+    def read(self, cursor, uid, ids, fields=None, context=None, load='_classic_read'):
         """Show connected workers.
         """
         setup_redis_connection()
@@ -329,8 +329,8 @@ class OorqQueue(osv.osv):
             id=i + 1,
             name=queue.name,
             n_jobs=queue.count,
-            is_emprty=queue.is_empty,
-            __last_updadate=False
+            is_empty=queue.is_empty(),
+            __last_update=False
         ) for i, queue in enumerate(Queue.all())]
         return queues
 
@@ -349,7 +349,7 @@ class OorqRegistry(osv.osv):
         'queue': fields.char('Queue name', size=64),
     }
 
-    def read(self, cursor, uid, ids, fields=None, context=None):
+    def read(self, cursor, uid, ids, fields=None, context=None, load='_classic_read'):
         """Show connected workers.
         """
         setup_redis_connection()
@@ -453,7 +453,7 @@ class OorqJob(osv.osv):
             requeue_job(context['jid'], connection=conn)
         return True
 
-    def read(self, cursor, uid, ids, fields=None, context=None):
+    def read(self, cursor, uid, ids, fields=None, context=None, load='_classic_read'):
         """Show connected workers.
         """
         setup_redis_connection()
