@@ -361,9 +361,9 @@ class OorqQueue(osv.osv):
                 elif op in ['in', 'not in']:
                     res = [queue for queue in res if (getattr(queue, 'name') in value) != ('not' in op)]
 
-        res = res[offset:]
+        res = res[int(offset):]
         if limit:
-            res = res[:limit]
+            res = res[:int(limit)]
 
         if count:
             return len(res)
