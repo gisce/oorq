@@ -363,7 +363,7 @@ class OorqQueue(osv.osv):
 
         res = res[int(offset):]
         if limit:
-            res = res[:limit]
+            res = res[:int(limit)]
 
         if count:
             return len(res)
