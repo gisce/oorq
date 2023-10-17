@@ -3,3 +3,4 @@ rq-dashboard
 osconf
 autoworker
 six
+MarkupSafe<=2.0.1
