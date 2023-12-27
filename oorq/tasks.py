@@ -52,6 +52,7 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import report
     import service
     import sql_db
+    from ctx import _context_stack
     # Reset the pool with config connections as limit
     sql_db._Pool = sql_db.ConnectionPool(int(tools.config['db_maxconn']))
     osv_ = osv.osv.osv_pool()
@@ -70,7 +71,10 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     if not pool._ready and not AsyncMode.is_async():
         logger.warning('Skipping running sync task because pool is not ready')
         return
+    if _context_stack.top is None:
+        _context_stack.push({})
     res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+    _context_stack.pop()
     logger.info('Time elapsed: %s' % (datetime.now() - start))
     sql_db.close_db(dbname)
     return res
