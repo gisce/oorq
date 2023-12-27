@@ -390,7 +390,12 @@ class OorqRegistry(osv.osv):
         """
         setup_redis_connection()
         registries = []
-        for idx, queue in enumerate(Queue.all()):
+        if not ids:
+            queues = Queue.all()
+        else:
+            queues = [queue for queue in Queue.all() if getattr(queue, 'name') in ids]
+
+        for idx, queue in enumerate(queues):
             reg = self.registry(name=queue.name)
             assert isinstance(reg, registry.BaseRegistry)
             registries.append({
@@ -400,6 +405,31 @@ class OorqRegistry(osv.osv):
                 'queue': reg.name
             })
         return registries
+
+    def search(self, cursor, uid, args, offset=0, limit=None, order=None, context=None, count=False):
+        setup_redis_connection()
+        res = self.read(cursor, uid, [])
+
+        for arg in args:
+            if arg:
+                column, op, value = arg
+                if op in ['=', '!=']:
+                    res = [queue for queue in res if (queue.get(column) == value) != ('!' in op)]
+                elif op == 'ilike':
+                    res = [queue for queue in res if str(value).lower() in str(queue.get(column)).lower()]
+                elif op == 'like':
+                    res = [queue for queue in res if value in queue.get(column)]
+                elif op in ['in', 'not in']:
+                    res = [queue for queue in res if (queue.get(column) in value) != ('not' in op)]
+
+        res = res[int(offset):]
+        if limit:
+            res = res[:int(limit)]
+
+        if count:
+            return len(res)
+        else:
+            return [queue.get('name') for queue in res]
 
 
 OorqRegistry()
