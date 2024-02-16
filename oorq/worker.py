@@ -23,7 +23,18 @@ class Worker(RQWorker):
         self.log.propagate = False
         try:
             from service.pubsub import PubSub
-            PubSub.connect('{}.worker'.format(config['db_name']))
+            if hasattr(tools.config, 'pubsub_subscriptions'):
+                subscriptions = (
+                    config.pubsub_subscriptions +
+                    ['{}.worker'.format(config['db_name'])] +
+                    [
+                        '{}.worker.{}'.format(config['db_name'], _q.name)
+                        for _q in self.queues
+                    ]
+                )
+                PubSub.connect(subscriptions)
+            else:
+                PubSub.connect('{}.worker'.format(config['db_name']))
         except ImportError:
             pass
 
