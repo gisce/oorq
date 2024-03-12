@@ -102,6 +102,7 @@ class job(object):
         self.queue = 'default'
         self.timeout = None
         self.result_ttl = None
+        self.failure_ttl = None
         self.at_front = False
         self.on_commit = False
         self.requeue = False
@@ -143,6 +144,7 @@ class job(object):
                         kwargs=job_kwargs,
                         timeout=self.timeout,
                         result_ttl=self.result_ttl,
+                        failure_ttl=self.failure_ttl,
                         depends_on=current_job,
                     )
                     transaction_id = id(cursor)
@@ -157,6 +159,7 @@ class job(object):
                         execute,
                         depends_on=current_job,
                         result_ttl=self.result_ttl,
+                        failure_ttl=self.failure_ttl,
                         args=job_args,
                         kwargs=job_kwargs,
                         at_front=self.at_front
@@ -239,6 +242,7 @@ class split_job(job):
                             kwargs=job_kwargs,
                             timeout=self.timeout,
                             result_ttl=self.result_ttl,
+                            failure_ttl=self.failure_ttl,
                             depends_on=current_job
                         )
                         transaction_id = id(cursor)
@@ -255,6 +259,7 @@ class split_job(job):
                             task,
                             depends_on=current_job,
                             result_ttl=self.result_ttl,
+                            failure_ttl=self.failure_ttl,
                             args=job_args,
                             kwargs=job_kwargs,
                             at_front=at_front
