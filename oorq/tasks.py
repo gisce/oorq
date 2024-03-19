@@ -169,7 +169,7 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     cursor = conn.cursor()
     obj = netsvc.LocalService('report.'+obj)
     if 'model' not in datas:
-        datas['model'] = getattr(obj._service, 'table', False)
+        datas['model'] = getattr(obj._service, 'table', False) or getattr(obj._service, 'model', False)
     result, format = obj.create(cursor, uid, ids, datas, context)
     job.meta['format'] = format
     job.save()
