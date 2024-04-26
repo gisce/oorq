@@ -4,6 +4,7 @@ from oorq.decorators import job, split_job
 from oorq.decorators import create_jobs_group
 from oorq.oorq import AsyncMode
 from rq.job import Job
+from service.security import Sudo
 
 
 class ResPartner(osv.osv):
@@ -34,7 +35,7 @@ class ResPartner(osv.osv):
         self.write_async(cursor, uid, ids, vals, context)
         raise osv.except_osv('Error', 'Test error!')
 
-    @job(async=True, queue='default', on_commit=True)
+    @job(queue='default', on_commit=True)
     def write_async(self, cr, user, ids, vals, context=None):
         #TODO: process before updating resource
         res = super(ResPartner, self).write(cr, user, ids, vals, context)
@@ -65,7 +66,6 @@ class ResPartner(osv.osv):
 
     @job(queue='dependency', on_commit=True)
     def dependency_job_on_commit(self, cursor, uid, ids, vals, context=None):
-        print "First job"
         import time
         self.write_async(cursor, uid, ids, vals, context=context)
         print("I'm working and not affected for the subjob")
@@ -89,6 +89,12 @@ class ResPartner(osv.osv):
             res = self.write_async(cursor, uid, ids, values, context)
             assert isinstance(res, Job)
         return res.result
+
+    def test_sudo(self, cursor, uid, ids, values, context=None):
+        if context is None:
+            context = {}
+        with Sudo(uid, 'base.group_user'):
+            self.write_async(cursor, uid, ids, values, context)
 
 
 ResPartner()
