@@ -20,6 +20,7 @@ from signals import (
     DB_CURSOR_SAVEPOINT
 )
 from autoworker import AutoWorker
+from ctx import sudo
 
 
 JobToProcess = namedtuple('JobToProcess', ['job', 'queue', 'at_front'])
@@ -136,6 +137,10 @@ class job(object):
                     conf_attrs, dbname, uid, osv_object, fname
                 ) + args[3:]
                 job_kwargs = kwargs
+                if sudo:
+                    job_kwargs['sudo'] = {
+                        'uid': sudo.uid, 'gid': sudo.gid
+                    }
                 if self.on_commit and async_mode:
                     job = Job.create(
                         execute,
@@ -231,6 +236,10 @@ class split_job(job):
                         conf_attrs, dbname, uid, osv_object, fname
                     ] + args[3:]
                     job_kwargs = kwargs
+                    if sudo:
+                        job_kwargs['sudo'] = {
+                            'uid': sudo.uid, 'gid': sudo.gid
+                        }
                     at_front = self.at_front
                     if self.on_commit:
                         job = Job.create(

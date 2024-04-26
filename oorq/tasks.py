@@ -14,6 +14,14 @@ from .oorq import StoredJobsPool, setup_redis_connection, AsyncMode
 from .utils import get_failed_queue
 
 
+class DummySudo(object):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
 def make_chunks(ids, n_chunks=None, size=None):
     """Do chunks from ids.
 
@@ -53,6 +61,7 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import service
     import sql_db
     from ctx import _context_stack
+    from service.security import Sudo
     # Reset the pool with config connections as limit
     sql_db._Pool = sql_db.ConnectionPool(int(tools.config['db_maxconn']))
     osv_ = osv.osv.osv_pool()
@@ -73,7 +82,9 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         return
     if _context_stack.top is None:
         _context_stack.push({})
-    res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+    context = 'sudo' in kw and Sudo(**kw.pop('sudo')) or DummySudo()
+    with context:
+        res = osv_.execute(dbname, uid, obj, method, *args, **kw)
     _context_stack.pop()
     logger.info('Time elapsed: %s' % (datetime.now() - start))
     sql_db.close_db(dbname)
@@ -97,6 +108,7 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import workflow
     import report
     import service
+    from service.security import Sudo
     import sql_db
     osv_ = osv.osv.osv_pool()
     pooler.get_db_and_pool(dbname)
@@ -113,11 +125,13 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     # Ensure args is a list to modify
     args = list(args)
     ids = args[0]
+    context = 'sudo' in kw and Sudo(**kw.pop('sudo')) or DummySudo()
     for exe_id in ids:
         try:
             logger.info('Executing id %s' % exe_id)
             args[0] = [exe_id]
-            res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+            with context:
+                res = osv_.execute(dbname, uid, obj, method, *args, **kw)
             all_res.append(res)
         except:
             logger.error('Executing id %s failed' % exe_id)
