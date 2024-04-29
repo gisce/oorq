@@ -180,7 +180,7 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     logging.basicConfig(level=log_level)
     sql_db.close_db(dbname)
     conn = sql_db.db_connect(dbname)
-    cursor = conn.cursor()
+    cursor = conn.cursor(readonly=True, isolation_level='repeatable_read')
     obj = netsvc.LocalService('report.'+obj)
     if 'model' not in datas:
         datas['model'] = getattr(obj._service, 'table', False) or getattr(obj._service, 'model', False)
