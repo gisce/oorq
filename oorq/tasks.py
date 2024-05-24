@@ -75,7 +75,7 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     log_level = tools.config['log_level']
     worker_log_level = os.getenv('LOG', False)
     if worker_log_level:
-        log_level = getattr(logging, worker_log_level, 'INFO')
+        log_level = getattr(logging, worker_log_level, logging.INFO)
     logging.basicConfig(level=log_level)
     if not pool._ready and not AsyncMode.is_async():
         logger.warning('Skipping running sync task because pool is not ready')
@@ -118,7 +118,7 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     log_level = tools.config['log_level']
     worker_log_level = os.getenv('LOG', False)
     if worker_log_level:
-        log_level = getattr(logging, worker_log_level, 'INFO')
+        log_level = getattr(logging, worker_log_level, logging.INFO)
     logging.basicConfig(level=log_level)
     all_res = []
     failed_ids = []
@@ -176,7 +176,7 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     log_level = tools.config['log_level']
     worker_log_level = os.getenv('LOG', False)
     if worker_log_level:
-        log_level = getattr(logging, worker_log_level, 'INFO')
+        log_level = getattr(logging, worker_log_level, logging.INFO)
     logging.basicConfig(level=log_level)
     sql_db.close_db(dbname)
     conn = sql_db.db_connect(dbname)
@@ -227,7 +227,7 @@ def update_jobs_group(conf_attrs, dbname, uid, name, internal, jobs_ids):
     log_level = tools.config['log_level']
     worker_log_level = os.getenv('LOG', False)
     if worker_log_level:
-        log_level = getattr(logging, worker_log_level, 'INFO')
+        log_level = getattr(logging, worker_log_level, logging.INFO)
     logging.basicConfig(level=log_level)
     logger.info('Time elapsed: %s' % (datetime.now() - start))
     sql_db.close_db(dbname)
