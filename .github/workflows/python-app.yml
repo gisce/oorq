@@ -1,0 +1,73 @@
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: OORQ_CI
+
+on:
+  push:
+    branches: [ master, api_v5 ]
+  pull_request:
+    branches: [ master, api_v5 ]
+
+env:
+  ERP: 5
+  OORQ_DATABASE: oerp5
+  OORQ_DB_USER: postgres
+  OORQ_DB_PASSWORD: postgres
+  OORQ_DB_HOST: localhost
+  OORQ_ADDONS_PATH: ${HOME}/src/openerp-server-${ERP}.0/bin/addons
+  PYTHONPATH: ${HOME}/src/openerp-server-${ERP}.0/bin:${HOME}/src/openerp-server-${ERP}.0/bin/addons
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      # You can use PyPy versions in python-version.
+      # For example, pypy2 and pypy3
+      matrix:
+        python-version: ["2.7"]
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          # Maps tcp port 5432 on service container to the host
+          - 5432:5432
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+        if [[ $ERP == 5 ]]; then easy_install egenix-mx-base; fi
+        mkdir -p ${HOME}/src
+        pushd ${HOME}/src
+        curl -L https://github.com/akretion/openerp-server/archive/${ERP}.0.tar.gz | tar xvzf -
+        cd ${HOME}/src/openerp-server-${ERP}.0/bin
+        psql postgres://$OORQ_DB_USER:$OORQ_DB_USER@$OORQ_DB_HOST:5432/ -c "create database $OORQ_DATABASE;"
+        python openerp-server.py --database=$OORQ_DATABASE --db_host=$OORQ_DB_HOST --db_password=$OORQ_DB_PASSWORD --db_user=$OORQ_DB_USER --init=all --stop-after-init
+        popd
+      env:
+        # The hostname used to communicate with the PostgreSQL service container
+        POSTGRES_HOST: postgres
+        # The default PostgreSQL port
+        POSTGRES_PORT: 5432
+    - name: Run test
+      run: |
+        py.test tests/*.py
+      env:
+        # The hostname used to communicate with the PostgreSQL service container
+        POSTGRES_HOST: postgres
+        # The default PostgreSQL port
+        POSTGRES_PORT: 5432
