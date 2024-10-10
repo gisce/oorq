@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: [ "2.7", "3.11" ]
-        erp-module: [ "oorq" ]
+        erp-module: [ "test_oorq" ]
     services:
       postgres:
         image: timescale/timescaledb-ha:pg15-ts2.11-all
