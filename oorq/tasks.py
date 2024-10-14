@@ -148,7 +148,7 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         logger.warning('Enqueued failed job (id:%s): [%s] pool(%s).%s%s'
                            % (job.id, dbname, obj, method, tuple(args)))
     logger.info('Time elapsed: %s' % (datetime.now() - start))
-    sql_db.close_db(dbname)
+
     return all_res
 
 
