@@ -76,6 +76,7 @@ class TestOORQ(testing.OOTestCase):
         cls.log_file = open('/tmp/worker.log', 'w')
         cls.env = os.environ.copy()
         cls.env['OPENERP_IGNORE_PUBSUB'] = "1"
+        cls.env['OPENERP_DB_NAME'] = config['db_name']
         cls.workers_process = []
         cls.redis_url = config.get('redis_url') or 'redis://localhost:6379/0'
         cls.cmd = ['rq', 'worker', '-u', cls.redis_url, '-w', 'oorq.worker.Worker']
