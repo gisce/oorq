@@ -34,7 +34,7 @@ def make_chunks(ids, n_chunks=None, size=None):
         raise ValueError("only n_chunks or size must be passed")
     if not size:
         size = int(ceil(len(ids) / n_chunks))
-    return [ids[x:x + size] for x in xrange(0, len(ids), size)]
+    return [ids[x:x + size] for x in range(0, len(ids), size)]
 
 
 def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
@@ -148,7 +148,7 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         logger.warning('Enqueued failed job (id:%s): [%s] pool(%s).%s%s'
                            % (job.id, dbname, obj, method, tuple(args)))
     logger.info('Time elapsed: %s' % (datetime.now() - start))
-    sql_db.close_db(dbname)
+
     return all_res
 
 

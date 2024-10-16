@@ -1,0 +1,103 @@
+name: oorq Tests (redis 5)
+
+on:
+  pull_request:
+    types: [ labeled ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{  github.event.label.name || github.ref }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  run-tests-5:
+    if: github.event_name == 'pull_request' && github.event.label.name == 'to be merged'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ "2.7", "3.11" ]
+        erp-module: [ "test_oorq" ]
+    services:
+      postgres:
+        image: timescale/timescaledb-ha:pg15-ts2.11-all
+        env:
+          POSTGRES_USER: erp
+          POSTGRES_PASSWORD: erp
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 127.0.0.1:5432:5432
+
+      redis:
+        image: redis:5
+        ports:
+          - 127.0.0.1:6379:6379
+    steps:
+      - name: Checkout code (oorq)
+        uses: actions/checkout@v4
+        with:
+          path: src/oorq
+
+      - name: Checkout code (ERP)
+        uses: actions/checkout@v4
+        with:
+          path: src/erp
+          repository: gisce/erp
+          token: ${{ secrets.RO_GITHUB_ACTIONS_REPOS }}
+
+      - name: Set up Python 3
+        if: matrix.python-version != '2.7'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Python 2
+        if: matrix.python-version == '2.7'
+        run: |
+          sudo apt update
+          sudo apt install python2 python2-dev python-pip
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 2
+          printf '1\n' | sudo update-alternatives --config python
+          cd /usr/bin
+          sudo ln -s /usr/bin/pip2 ./pip
+
+      - name: Install Requirements
+        run: |
+          pip install -r src/erp/requirements.txt
+          pip install -r src/erp/requirements-dev.txt
+          pip install -r src/erp/server/bin/addons/base/requirements.txt
+          pip install -r src/oorq/requirements.txt
+          pip install pymongo==3.13.0
+          pip install destral
+
+      - name: Link addons
+        run: |
+          cd src/erp
+          python tools/link_addons.py
+
+      - name: Run tests
+        env:
+          OPENERP_SECRET: shhhhhhhht
+          OPENERP_REDIS_URL: redis://localhost:6379/0
+          OPENERP_ROOT_PATH: ${{ github.workspace }}/src/erp/server/bin
+          OPENERP_ADDONS_PATH: ${{ github.workspace }}/src/erp/server/bin/addons
+          PYTHONPATH: ${{ github.workspace }}/src/erp/server/bin:${{ github.workspace }}/src/erp/server/bin/addons:${{ github.workspace }}/src/erp/server/sitecustomize
+          OPENERP_DB_USER: erp
+          OPENERP_DB_PASSWORD: erp
+          OPENERP_DB_HOST: localhost
+
+        run: |
+          destral --report-coverage --enable-coverage --report-junitxml ${{ github.workspace }}/report_tests -m ${{ matrix.erp-module }}
+
+      - name: Publish tests Results Redis
+        if: (success() || failure())
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          junit_files: "report_tests/*.xml"
+          check_name: "TestsResults_redis5${{ matrix.python-version }}_${{ matrix.erp-module }}"
+          comment_title: "Python oorq redis 5 ${{ matrix.python-version }} Tests for ${{ matrix.erp-module }}"
