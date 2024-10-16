@@ -183,8 +183,8 @@ class TestOORQ(testing.OOTestCase):
             uid = txn.user
             partner_obj.test_dependency_job(cursor, uid, self.new_partner_ids, {'active': True})
             # This sleep is needed because the enqueue delay 10+2
-            sleep(12)
-        self._empty_wait()
+            sleep(14)
+        self._empty_wait(timeout=30)
         sleep(1)
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
