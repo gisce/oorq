@@ -93,6 +93,8 @@ class JobsPool(object):
 
     @property
     def progress(self):
+        if not self.num_jobs:
+            return 100.0
         return (len(self.done_jobs) * 1.0 / self.num_jobs) * 100
 
     @property
