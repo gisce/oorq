@@ -12,7 +12,7 @@ concurrency:
 jobs:
   run-tests-3:
     if: github.event_name == 'pull_request' && github.event.label.name == 'to be merged'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
