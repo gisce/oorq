@@ -22,6 +22,27 @@ class DummySudo(object):
         pass
 
 
+class SentryCatch(object):
+    def __init__(self, **kwargs):
+        for _k in kwargs.keys():
+            setattr(self, _k, kwargs[_k])
+
+    def __enter__(self):
+        return self
+
+    def __getattr__(self, item):
+        return None
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_val:
+            import sentry_sdk
+            with sentry_sdk.configure_scope() as scope:
+                scope.set_tag('service_name', self.obj),
+                scope.set_tag('method', self.method)
+                scope.set_tag('uuid', '{}'.format(self._uuid))
+                sentry_sdk.capture_exception(exc_val)
+
+
 def make_chunks(ids, n_chunks=None, size=None):
     """Do chunks from ids.
 
@@ -62,6 +83,10 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import sql_db
     from ctx import _context_stack
     from service.security import Sudo
+    try:
+        from tools.service_utils import SimpleGlobalUUIDGenerator
+    except ImportError:
+        SimpleGlobalUUIDGenerator = DummySudo
     # Reset the pool with config connections as limit
     sql_db._Pool = sql_db.ConnectionPool(int(tools.config['db_maxconn']))
     osv_ = osv.osv.osv_pool()
@@ -84,7 +109,11 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         _context_stack.push({})
     context = 'sudo' in kw and Sudo(**kw.pop('sudo')) or DummySudo()
     with context:
-        res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+        with SimpleGlobalUUIDGenerator() as _uuid:
+            _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
+            with SentryCatch(_uuid=_uuid, obj=obj, method=method):
+                res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+
     _context_stack.pop()
     logger.info('Time elapsed: %s' % (datetime.now() - start))
     sql_db.close_db(dbname)
@@ -110,6 +139,10 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import service
     from service.security import Sudo
     import sql_db
+    try:
+        from tools.service_utils import SimpleGlobalUUIDGenerator
+    except ImportError:
+        SimpleGlobalUUIDGenerator = DummySudo
     osv_ = osv.osv.osv_pool()
     pooler.get_db_and_pool(dbname)
     logging.disable(0)
@@ -131,7 +164,10 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
             logger.info('Executing id %s' % exe_id)
             args[0] = [exe_id]
             with context:
-                res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+                with SimpleGlobalUUIDGenerator() as _uuid:
+                    _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
+                    with SentryCatch(_uuid=_uuid, obj=obj, method=method):
+                        res = osv_.execute(dbname, uid, obj, method, *args, **kw)
             all_res.append(res)
         except:
             logger.error('Executing id %s failed' % exe_id)
@@ -169,6 +205,11 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     import report
     import service
     import sql_db
+    try:
+        from tools.service_utils import SimpleGlobalUUIDGenerator
+    except ImportError:
+        SimpleGlobalUUIDGenerator = DummySudo
+    from tools.service_utils import WebServiceTracker
     pooler.get_db_and_pool(dbname)
     logging.disable(0)
     logger = logging.getLogger()
@@ -181,10 +222,15 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     sql_db.close_db(dbname)
     conn = sql_db.db_connect(dbname)
     cursor = conn.cursor(readonly=True, isolation_level='repeatable_read')
+    _obj_name = obj
     obj = netsvc.LocalService('report.'+obj)
     if 'model' not in datas:
         datas['model'] = getattr(obj._service, 'table', False) or getattr(obj._service, 'model', False)
-    result, format = obj.create(cursor, uid, ids, datas, context)
+    with SimpleGlobalUUIDGenerator() as _uuid:
+        _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
+        with WebServiceTracker(_uuid=_uuid, uid=uid, obj=_obj_name, method='report', db=conn) as wst:
+            with SentryCatch(_uuid=_uuid, obj=_obj_name, method='report'):
+                result, format = obj.create(cursor, uid, ids, datas, context)
     job.meta['format'] = format
     job.save()
     cursor.close()

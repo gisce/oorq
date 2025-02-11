@@ -19,6 +19,7 @@ class Worker(RQWorker):
         import sql_db
         osv_ = osv.osv.osv_pool()
         pooler.get_db_and_pool(config['db_name'])
+        netsvc.init_logger()
         netsvc.SERVICES['im_a_worker'] = True
         self.log.propagate = False
         try:
@@ -35,6 +36,9 @@ class Worker(RQWorker):
                 PubSub.connect(subscriptions)
             else:
                 PubSub.connect('{}.worker'.format(config['db_name']))
+            from erp_sentry.sentry_base import SentryService
+            SentryService()
+
         except ImportError:
             pass
 
