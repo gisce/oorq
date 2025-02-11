@@ -22,6 +22,27 @@ class DummySudo(object):
         pass
 
 
+class SentryCatch(object):
+    def __init__(self, **kwargs):
+        for _k in kwargs.keys():
+            setattr(self, _k, kwargs[_k])
+
+    def __enter__(self):
+        return self
+
+    def __getattr__(self, item):
+        return None
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_val:
+            import sentry_sdk
+            with sentry_sdk.configure_scope() as scope:
+                scope.set_tag('service_name', self.obj),
+                scope.set_tag('method', self.method)
+                scope.set_tag('uuid', '{}'.format(self._uuid))
+                sentry_sdk.capture_exception(exc_val)
+
+
 def make_chunks(ids, n_chunks=None, size=None):
     """Do chunks from ids.
 
@@ -62,6 +83,10 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import sql_db
     from ctx import _context_stack
     from service.security import Sudo
+    try:
+        from tools.service_utils import SimpleGlobalUUIDGenerator
+    except ImportError:
+        SimpleGlobalUUIDGenerator = DummySudo
     # Reset the pool with config connections as limit
     sql_db._Pool = sql_db.ConnectionPool(int(tools.config['db_maxconn']))
     osv_ = osv.osv.osv_pool()
@@ -84,7 +109,10 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         _context_stack.push({})
     context = 'sudo' in kw and Sudo(**kw.pop('sudo')) or DummySudo()
     with context:
-        res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+        with SimpleGlobalUUIDGenerator() as _uuid:
+            with SentryCatch(_uuid=_uuid, obj=obj, method=method):
+                res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+
     _context_stack.pop()
     logger.info('Time elapsed: %s' % (datetime.now() - start))
     sql_db.close_db(dbname)
