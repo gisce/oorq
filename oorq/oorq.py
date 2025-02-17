@@ -334,7 +334,7 @@ class OorqQueue(osv.osv):
             values = {
                 'id': queue.name,
                 'name': queue.name,
-                'n_jobs': len(queue.jobs),
+                'n_jobs': queue.count,
                 'is_empty': queue.is_empty()
             }
             for key in list(values.keys()):
