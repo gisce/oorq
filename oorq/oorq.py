@@ -395,11 +395,11 @@ class OorqRegistry(osv.osv):
         else:
             queues = [queue for queue in Queue.all() if getattr(queue, 'name') in ids]
 
-        for idx, queue in enumerate(queues):
+        for queue in queues:
             reg = self.registry(name=queue.name)
             assert isinstance(reg, registry.BaseRegistry)
             registries.append({
-                'id': idx,
+                'id': reg.name,
                 'name': reg.name,
                 'n_jobs': reg.count,
                 'queue': reg.name
