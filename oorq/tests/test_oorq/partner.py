@@ -5,6 +5,7 @@ from oorq.decorators import create_jobs_group
 from oorq.oorq import AsyncMode
 from rq.job import Job
 from service.security import Sudo
+from service.taskmanager import TaskManager
 
 
 class ResPartner(osv.osv):
@@ -95,6 +96,13 @@ class ResPartner(osv.osv):
             context = {}
         with Sudo(uid, 'base.group_user'):
             self.write_async(cursor, uid, ids, values, context)
+
+    @job(queue='default', on_commit=True)
+    def write_async_with_task(self, cr, user, ids, vals, context=None):
+        task = TaskManager.current_task()
+        task.update(progress=10, state='running')
+        res = super(ResPartner, self).write(cr, user, ids, vals, context)
+
 
 
 ResPartner()
