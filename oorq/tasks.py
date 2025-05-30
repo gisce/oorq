@@ -114,13 +114,15 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         with SimpleGlobalUUIDGenerator() as _uuid:
             _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
             with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method, db=db) as wst:
+                task_pushed = False
                 if 'current_task_id' in kw:
                     task_id = kw.pop('current_task_id')
                     task = Task(task_id)
                     TASK_CONTEXT_STACK.push(task)
+                    task_pushed = True
                 with SentryCatch(_uuid=_uuid, obj=obj, method=method):
                     res = osv_.execute(dbname, uid, obj, method, *args, **kw)
-                if 'current_task_id' in kw:
+                if task_pushed:
                     TASK_CONTEXT_STACK.pop()
 
     _context_stack.pop()
