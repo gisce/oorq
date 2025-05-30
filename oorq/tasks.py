@@ -112,7 +112,7 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     with context:
         with SimpleGlobalUUIDGenerator() as _uuid:
             _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-            with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method, db=db) as wst:
+            with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method, db=db):
                 with SentryCatch(_uuid=_uuid, obj=obj, method=method):
                     res = osv_.execute(dbname, uid, obj, method, *args, **kw)
 
