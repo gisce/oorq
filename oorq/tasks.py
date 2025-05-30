@@ -120,7 +120,8 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
                     TASK_CONTEXT_STACK.push(task)
                 with SentryCatch(_uuid=_uuid, obj=obj, method=method):
                     res = osv_.execute(dbname, uid, obj, method, *args, **kw)
-                TASK_CONTEXT_STACK.pop()
+                if 'current_task_id' in kw:
+                    TASK_CONTEXT_STACK.pop()
 
     _context_stack.pop()
     logger.info('Time elapsed: %s' % (datetime.now() - start))
@@ -183,7 +184,8 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
                             TASK_CONTEXT_STACK.push(task)
                         with SentryCatch(_uuid=_uuid, obj=obj, method=method):
                             res = osv_.execute(dbname, uid, obj, method, *args, **kw)
-                        TASK_CONTEXT_STACK.pop()
+                        if 'current_task_id' in kw:
+                            TASK_CONTEXT_STACK.pop()
             all_res.append(res)
         except:
             logger.error('Executing id %s failed' % exe_id)
