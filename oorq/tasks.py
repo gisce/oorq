@@ -113,7 +113,7 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     with context:
         with SimpleGlobalUUIDGenerator() as _uuid:
             _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-            with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method, db=db) as wst:
+            with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method, db=db):
                 task_pushed = False
                 if 'current_task_id' in kw:
                     task_id = kw.pop('current_task_id')
@@ -179,7 +179,7 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
             with context:
                 with SimpleGlobalUUIDGenerator() as _uuid:
                     _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-                    with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method) as wst:
+                    with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method):
                         task_pushed = False
                         if 'current_task_id' in kw:
                             task_id = kw.pop('current_task_id')
