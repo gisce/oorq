@@ -14,13 +14,13 @@
                     <field name="name"/>
                     <field name="wclass"/>
                     <field name="queues"/>
-                    <field name="state"/>
-                    <field name="total_working_time"/>
-                    <field name="successful_job_count"/>
-                    <field name="failed_job_count"/>
-                    <field name="birth_date"/>
-                    <field name="last_heartbeat"/>
-                    <field name="current_job_id"/>
+                    <field name="state" autorefresh="1"/>
+                    <field name="total_working_time" autorefresh="1"/>
+                    <field name="successful_job_count" autorefresh="1"/>
+                    <field name="failed_job_count" autorefresh="1"/>
+                    <field name="birth_date" autorefresh="1"/>
+                    <field name="last_heartbeat" autorefresh="1"/>
+                    <field name="current_job_id" autorefresh="1"/>
                 </tree>
             </field>
         </record>
@@ -42,8 +42,8 @@
             <field name="arch" type="xml">
                 <tree string="Active Queues">
                     <field name="name"/>
-                    <field name="n_jobs"/>
-                    <field name="is_empty"/>
+                    <field name="n_jobs" autorefresh="1"/>
+                    <field name="is_empty" autorefresh="1"/>
                 </tree>
             </field>
         </record>
@@ -65,7 +65,7 @@
             <field name="arch" type="xml">
                 <tree string="Registry">
                     <field name="name"/>
-                    <field name="n_jobs"/>
+                    <field name="n_jobs" autorefresh="1"/>
                     <field name="queue"/>
                 </tree>
             </field>
@@ -163,22 +163,22 @@
                     <group colspan="2" col="2">
                         <field name="queue"/>
                         <field name="origin"/>
-                        <field name="status"/>
+                        <field name="status" autorefresh="1"/>
                     </group>
                     <group col="2" colspan="2">
                         <field name="created_at"/>
                         <field name="enqueued_at"/>
-                        <field name="ended_at"/>
+                        <field name="ended_at" autorefresh="1"/>
                     </group>
                     <notebook colspan="4">
                         <page string="Description">
                             <field name="description" nolabel="1" colspan="4"/>
                         </page>
                         <page string="Result">
-                            <field name="result" nolabel="1" colspan="4"/>
+                            <field name="result" nolabel="1" colspan="4" autorefresh="1"/>
                         </page>
                         <page string="Exception info">
-                            <field name="exc_info" nolabel="1" colspan="4"/>
+                            <field name="exc_info" nolabel="1" colspan="4" autorefresh="1"/>
                         </page>
                     </notebook>
                     <group string="Actions" colspan="4" col="4">
@@ -195,14 +195,14 @@
             <field name="arch" type="xml">
                 <tree string="Active jobs">
                     <field name="jid"/>
-                    <field name="status"/>
+                    <field name="status" autorefresh="1"/>
                     <field name="queue"/>
                     <field name="created_at"/>
                     <field name="enqueued_at"/>
-                    <field name="ended_at"/>
+                    <field name="ended_at" autorefresh="1"/>
                     <field name="origin"/>
-                    <field name="result"/>
-                    <field name="exc_info"/>
+                    <field name="result" autorefresh="1"/>
+                    <field name="exc_info" autorefresh="1"/>
                     <field name="description"/>
                 </tree>
             </field>
@@ -268,11 +268,11 @@
             <field name="arch" type="xml">
                 <form string="Jobs group">
                     <field name="name" colspan="4" select="1"/>
-                    <field name="progress" colspan="4" widget="progressbar"/>
+                    <field name="progress" colspan="4" widget="progressbar" autorefresh="1"/>
                     <field name="start" select="1"/>
-                    <field name="end" select="1"/>
+                    <field name="end" select="1" autorefresh="1"/>
                     <field name="num_jobs" />
-                    <field name="active" select="1"/>
+                    <field name="active" select="1" autorefresh="1"/>
                     <field name="user_id" select="1"/>
                 </form>
             </field>
@@ -284,13 +284,13 @@
             <field name="arch" type="xml">
                 <tree string="Jobs groups">
                     <field name="name" colspan="4" select="1"/>
-                    <field name="progress" colspan="4" widget="progressbar"/>
-                    <field name="start"/>
-                    <field name="end"/>
+                    <field name="progress" colspan="4" widget="progressbar" autorefresh="1"/>
+                    <field name="start" autorefresh="1"/>
+                    <field name="end" autorefresh="1"/>
                     <field name="num_jobs" />
-                    <field name="num_failed_jobs" />
-                    <field name="num_success_jobs" />
-                    <field name="active"/>
+                    <field name="num_failed_jobs" autorefresh="1"/>
+                    <field name="num_success_jobs" autorefresh="1"/>
+                    <field name="active" autorefresh="1"/>
                     <field name="user_id"/>
                 </tree>
             </field>
