@@ -83,6 +83,7 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import sql_db
     from ctx import _context_stack
     from service.security import Sudo
+    from service.taskmanager import Task, TASK_CONTEXT_STACK
     from tools.service_utils import WebServiceTracker
     try:
         from tools.service_utils import SimpleGlobalUUIDGenerator
@@ -113,8 +114,16 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         with SimpleGlobalUUIDGenerator() as _uuid:
             _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
             with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method, db=db):
+                task_pushed = False
+                if 'current_task_id' in kw:
+                    task_id = kw.pop('current_task_id')
+                    task = Task(task_id)
+                    TASK_CONTEXT_STACK.push(task)
+                    task_pushed = True
                 with SentryCatch(_uuid=_uuid, obj=obj, method=method):
                     res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+                if task_pushed:
+                    TASK_CONTEXT_STACK.pop()
 
     _context_stack.pop()
     logger.info('Time elapsed: %s' % (datetime.now() - start))
@@ -140,6 +149,7 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import report
     import service
     from service.security import Sudo
+    from service.taskmanager import Task, TASK_CONTEXT_STACK
     from tools.service_utils import WebServiceTracker
     import sql_db
     try:
@@ -170,8 +180,16 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
                 with SimpleGlobalUUIDGenerator() as _uuid:
                     _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
                     with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method):
+                        task_pushed = False
+                        if 'current_task_id' in kw:
+                            task_id = kw.pop('current_task_id')
+                            task = Task(task_id)
+                            TASK_CONTEXT_STACK.push(task)
+                            task_pushed = True
                         with SentryCatch(_uuid=_uuid, obj=obj, method=method):
                             res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+                        if task_pushed:
+                            TASK_CONTEXT_STACK.pop()
             all_res.append(res)
         except:
             logger.error('Executing id %s failed' % exe_id)

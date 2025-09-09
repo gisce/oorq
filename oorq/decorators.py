@@ -21,6 +21,10 @@ from signals import (
 )
 from autoworker import AutoWorker
 from ctx import sudo
+from service.taskmanager import TaskManager
+
+
+current_task = TaskManager.current_task()
 
 
 JobToProcess = namedtuple('JobToProcess', ['job', 'queue', 'at_front'])
@@ -141,6 +145,8 @@ class job(object):
                     job_kwargs['sudo'] = {
                         'uid': sudo.uid, 'gid': sudo.gid
                     }
+                if current_task and current_task.defer_exit:
+                    job_kwargs['current_task_id'] = current_task.id
                 if self.on_commit and async_mode:
                     job = Job.create(
                         execute,
@@ -240,6 +246,8 @@ class split_job(job):
                         job_kwargs['sudo'] = {
                             'uid': sudo.uid, 'gid': sudo.gid
                         }
+                    if current_task and current_task.defer_exit:
+                        job_kwargs['current_task_id'] = current_task.id
                     at_front = self.at_front
                     if self.on_commit:
                         job = Job.create(
