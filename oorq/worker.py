@@ -28,20 +28,21 @@ class Worker(RQWorker):
         self.log.propagate = False
         try:
             from service.pubsub import PubSub
+            _queue_names = [_q.name for _q in self.queues]
             if hasattr(tools.config, 'pubsub_subscriptions'):
                 subscriptions = (
                     config.pubsub_subscriptions +
                     ['{}.worker'.format(config['db_name'])] +
                     [
-                        '{}.worker.{}'.format(config['db_name'], _q.name)
-                        for _q in self.queues
+                        '{}.worker.{}'.format(config['db_name'], _qn)
+                        for _qn in _queue_names
                     ]
                 )
                 PubSub.connect(subscriptions)
             else:
                 PubSub.connect('{}.worker'.format(config['db_name']))
             if WORKER_STARTED is not None:
-                WORKER_STARTED.send(1)
+                WORKER_STARTED.send(queues=_queue_names)
             from erp_sentry.sentry_base import SentryService
             SentryService()
 
