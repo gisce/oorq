@@ -1,5 +1,9 @@
 from rq import Worker as RQWorker
 import sys
+try:
+    from signals import WORKER_STARTED
+except ImportError:
+    WORKER_STARTED = None
 
 
 class Worker(RQWorker):
@@ -36,6 +40,8 @@ class Worker(RQWorker):
                 PubSub.connect(subscriptions)
             else:
                 PubSub.connect('{}.worker'.format(config['db_name']))
+            if WORKER_STARTED is not None:
+                WORKER_STARTED.send(1)
             from erp_sentry.sentry_base import SentryService
             SentryService()
 
