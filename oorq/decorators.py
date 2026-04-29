@@ -7,6 +7,7 @@ import os
 
 from rq import Queue
 from rq.job import Job
+from rq.exceptions import NoSuchJobError
 from rq import get_current_job
 from .oorq import setup_redis_connection, set_hash_job, AsyncMode, get_redis_url
 from osconf import config_from_environment
@@ -27,7 +28,7 @@ from service.taskmanager import TaskManager
 current_task = TaskManager.current_task()
 
 
-JobToProcess = namedtuple('JobToProcess', ['job', 'queue', 'at_front'])
+JobToProcess = namedtuple('JobToProcess', ['job_id', 'queue_name', 'at_front'])
 
 
 class ProcessJobs(object):
@@ -38,7 +39,7 @@ class ProcessJobs(object):
     def add_job(cls, transaction_id, job, queue, at_font=False):
         cls.JOBS_TO_PROCESS.setdefault(transaction_id, [])
         cls.JOBS_TO_PROCESS[transaction_id].append(
-            JobToProcess(job, queue, at_font)
+            JobToProcess(job.id, queue.name, at_font)
         )
 
     @staticmethod
@@ -53,11 +54,14 @@ class ProcessJobs(object):
     @staticmethod
     def commit(cursor):
         transaction_id = id(cursor)
+        redis_conn = setup_redis_connection()
         jobs = [
             j for j in ProcessJobs.JOBS_TO_PROCESS.pop(transaction_id, [])
             if isinstance(j, JobToProcess)
         ]
-        for job, queue, at_front in jobs:
+        for job_id, queue_name, at_front in jobs:
+            job = Job.fetch(job_id, connection=redis_conn)
+            queue = Queue(queue_name, connection=redis_conn)
             queue.enqueue_job(job, at_front=at_front)
             log('Enqueued job {} to queue {} from commit transaction {}'.format(
                 job.id, queue.name, transaction_id
@@ -66,25 +70,39 @@ class ProcessJobs(object):
             del ProcessJobs.JOBS_TO_PROCESS[transaction_id]
 
     @staticmethod
+    def _delete_jobs(jobs):
+        redis_conn = setup_redis_connection()
+        for job_id, queue_name, at_front in jobs:
+            try:
+                Job.fetch(job_id, connection=redis_conn).delete()
+            except NoSuchJobError:
+                log('Job {} was already deleted before rollback cleanup'.format(
+                    job_id
+                ), netsvc.LOG_WARNING)
+
+    @staticmethod
     def rollback(cursor):
         transaction_id = id(cursor)
-        jobs = ProcessJobs.JOBS_TO_PROCESS.pop(transaction_id, [])
+        jobs = [
+            j for j in ProcessJobs.JOBS_TO_PROCESS.pop(transaction_id, [])
+            if isinstance(j, JobToProcess)
+        ]
         if jobs:
             log('Cancelling {} jobs from rollback of transaction {}'.format(
                 len(jobs), transaction_id
             ))
+            ProcessJobs._delete_jobs(jobs)
 
     @staticmethod
     def rollback_savepoint(cursor, savepoint):
         transaction_id = id(cursor)
         try:
             index = ProcessJobs.JOBS_TO_PROCESS[transaction_id].index(savepoint)
-            jobs = [
-                j for j in ProcessJobs.JOBS_TO_PROCESS[transaction_id][index:]
-                if isinstance(j, JobToProcess)
-            ]
+            rollback_items = ProcessJobs.JOBS_TO_PROCESS[transaction_id][index:]
+            jobs = [j for j in rollback_items if isinstance(j, JobToProcess)]
             log('Cancelling {} jobs from rollback to savepoint {} of '
                 'transaction {}'.format(len(jobs), savepoint, transaction_id))
+            ProcessJobs._delete_jobs(jobs)
             del ProcessJobs.JOBS_TO_PROCESS[transaction_id][index:]
         except ValueError:
             pass
