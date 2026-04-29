@@ -22,9 +22,14 @@ class FakeTaskManager(object):
         return None
 
 
+class FakeNoSuchJobError(Exception):
+    pass
+
+
 class FakeJob(object):
     deleted = []
     fetched = []
+    missing_jobs = set()
 
     def __init__(self, job_id):
         self.id = job_id
@@ -32,6 +37,8 @@ class FakeJob(object):
     @classmethod
     def fetch(cls, job_id, connection=None):
         cls.fetched.append((job_id, connection))
+        if job_id in cls.missing_jobs:
+            raise FakeNoSuchJobError()
         return cls(job_id)
 
     def delete(self):
@@ -40,12 +47,15 @@ class FakeJob(object):
 
 class FakeQueue(object):
     enqueued = []
+    fail_on_job_ids = set()
 
     def __init__(self, name, connection=None, **kwargs):
         self.name = name
         self.connection = connection
 
     def enqueue_job(self, job, at_front=False):
+        if job.id in self.fail_on_job_ids:
+            raise RuntimeError('enqueue failed')
         self.enqueued.append((self.name, job.id, at_front, self.connection))
 
 
@@ -87,9 +97,6 @@ def install_import_stubs():
     sys.modules['rq.job'] = rq_job_module
 
     rq_exceptions_module = types.ModuleType('rq.exceptions')
-
-    class FakeNoSuchJobError(Exception):
-        pass
 
     rq_exceptions_module.NoSuchJobError = FakeNoSuchJobError
     sys.modules['rq.exceptions'] = rq_exceptions_module
@@ -135,9 +142,9 @@ def install_import_stubs():
 
 def load_decorators_module():
     install_import_stubs()
-    decorators_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), 'oorq', 'decorators.py'
-    )
+    decorators_path = os.path.abspath(os.path.join(
+        os.path.dirname(__file__), '..', '..', '..', 'decorators.py'
+    ))
     if 'oorq.decorators' in sys.modules:
         del sys.modules['oorq.decorators']
     return imp.load_source('oorq.decorators', decorators_path)
@@ -148,15 +155,34 @@ class FakeCursor(object):
 
 
 class TestProcessJobs(unittest.TestCase):
+    MODULES_TO_STUB = [
+        'oorq', 'oorq.decorators', 'oorq.oorq', 'oorq.exceptions',
+        'oorq.tasks', 'rq', 'rq.job', 'rq.exceptions', 'osconf',
+        'tools', 'netsvc', 'signals', 'autoworker', 'ctx', 'service',
+        'service.taskmanager'
+    ]
+
     def setUp(self):
+        self.original_modules = dict(
+            (name, sys.modules.get(name)) for name in self.MODULES_TO_STUB
+        )
         self.decorators = load_decorators_module()
         self.decorators.ProcessJobs.JOBS_TO_PROCESS = {}
         FakeJob.deleted = []
         FakeJob.fetched = []
+        FakeJob.missing_jobs = set()
         FakeQueue.enqueued = []
+        FakeQueue.fail_on_job_ids = set()
         self.decorators.Job = FakeJob
         self.decorators.Queue = FakeQueue
         self.decorators.setup_redis_connection = lambda: 'redis-conn'
+
+    def tearDown(self):
+        for name, module in self.original_modules.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
     def test_add_job_keeps_minimal_reference_only(self):
         cursor = FakeCursor()
@@ -184,6 +210,41 @@ class TestProcessJobs(unittest.TestCase):
         self.assertEqual(FakeJob.fetched, [('job-1', 'redis-conn')])
         self.assertEqual(FakeQueue.enqueued, [('queue-1', 'job-1', False, 'redis-conn')])
         self.assertNotIn(id(cursor), self.decorators.ProcessJobs.JOBS_TO_PROCESS)
+
+    def test_commit_skips_missing_jobs(self):
+        cursor = FakeCursor()
+        FakeJob.missing_jobs = set(['job-missing'])
+        self.decorators.ProcessJobs.add_job(
+            id(cursor), FakeJob('job-missing'), FakeQueue('queue-1'), False
+        )
+        self.decorators.ProcessJobs.add_job(
+            id(cursor), FakeJob('job-ok'), FakeQueue('queue-1'), False
+        )
+
+        self.decorators.ProcessJobs.commit(cursor)
+
+        self.assertEqual(FakeQueue.enqueued, [('queue-1', 'job-ok', False, 'redis-conn')])
+        self.assertNotIn(id(cursor), self.decorators.ProcessJobs.JOBS_TO_PROCESS)
+
+    def test_commit_keeps_pending_jobs_if_enqueue_fails(self):
+        cursor = FakeCursor()
+        FakeQueue.fail_on_job_ids = set(['job-2'])
+        self.decorators.ProcessJobs.add_job(
+            id(cursor), FakeJob('job-1'), FakeQueue('queue-1'), False
+        )
+        self.decorators.ProcessJobs.add_job(
+            id(cursor), FakeJob('job-2'), FakeQueue('queue-1'), False
+        )
+        self.decorators.ProcessJobs.add_job(
+            id(cursor), FakeJob('job-3'), FakeQueue('queue-1'), False
+        )
+
+        with self.assertRaises(RuntimeError):
+            self.decorators.ProcessJobs.commit(cursor)
+
+        self.assertEqual(FakeQueue.enqueued, [('queue-1', 'job-1', False, 'redis-conn')])
+        pending = self.decorators.ProcessJobs.JOBS_TO_PROCESS[id(cursor)]
+        self.assertEqual([job.job_id for job in pending], ['job-2', 'job-3'])
 
     def test_rollback_deletes_pending_jobs_from_redis(self):
         cursor = FakeCursor()

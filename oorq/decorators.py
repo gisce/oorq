@@ -36,10 +36,10 @@ class ProcessJobs(object):
     JOBS_TO_PROCESS = {}
 
     @classmethod
-    def add_job(cls, transaction_id, job, queue, at_font=False):
+    def add_job(cls, transaction_id, job, queue, at_front=False):
         cls.JOBS_TO_PROCESS.setdefault(transaction_id, [])
         cls.JOBS_TO_PROCESS[transaction_id].append(
-            JobToProcess(job.id, queue.name, at_font)
+            JobToProcess(job.id, queue.name, at_front)
         )
 
     @staticmethod
@@ -55,18 +55,32 @@ class ProcessJobs(object):
     def commit(cursor):
         transaction_id = id(cursor)
         redis_conn = setup_redis_connection()
-        jobs = [
-            j for j in ProcessJobs.JOBS_TO_PROCESS.pop(transaction_id, [])
-            if isinstance(j, JobToProcess)
-        ]
-        for job_id, queue_name, at_front in jobs:
-            job = Job.fetch(job_id, connection=redis_conn)
+        pending_jobs = ProcessJobs.JOBS_TO_PROCESS.get(transaction_id, [])
+        index = 0
+        while index < len(pending_jobs):
+            pending_job = pending_jobs[index]
+            if not isinstance(pending_job, JobToProcess):
+                del pending_jobs[index]
+                continue
+
+            job_id, queue_name, at_front = pending_job
+            try:
+                job = Job.fetch(job_id, connection=redis_conn)
+            except NoSuchJobError:
+                log('Job {} was not found during commit of transaction {}; '
+                    'skipping enqueue'.format(job_id, transaction_id),
+                    netsvc.LOG_WARNING)
+                del pending_jobs[index]
+                continue
+
             queue = Queue(queue_name, connection=redis_conn)
             queue.enqueue_job(job, at_front=at_front)
             log('Enqueued job {} to queue {} from commit transaction {}'.format(
                 job.id, queue.name, transaction_id
             ))
-        if transaction_id in ProcessJobs.JOBS_TO_PROCESS:
+            del pending_jobs[index]
+
+        if not pending_jobs and transaction_id in ProcessJobs.JOBS_TO_PROCESS:
             del ProcessJobs.JOBS_TO_PROCESS[transaction_id]
 
     @staticmethod
@@ -175,12 +189,6 @@ class job(object):
                         depends_on=current_job,
                     )
                     transaction_id = id(cursor)
-                    ProcessJobs.add_job(transaction_id, job, q, self.at_front)
-                    log('Created job (id:%s) for queue %s: [%s] pool(%s).%s%s '
-                        '(waiting to commit/rollback %s)' % (
-                            job.id, q.name, dbname, osv_object, fname, args[2:],
-                            transaction_id
-                        ))
                 else:
                     job = q.enqueue(
                         execute,
@@ -195,6 +203,13 @@ class job(object):
                 job.meta['requeue'] = self.requeue
                 job.save()
                 set_hash_job(job)
+                if self.on_commit and async_mode:
+                    ProcessJobs.add_job(transaction_id, job, q, self.at_front)
+                    log('Created job (id:%s) for queue %s: [%s] pool(%s).%s%s '
+                        '(waiting to commit/rollback %s)' % (
+                            job.id, q.name, dbname, osv_object, fname, args[2:],
+                            transaction_id
+                        ))
                 return job
             else:
                 # Remove the token
@@ -277,14 +292,6 @@ class split_job(job):
                             depends_on=current_job
                         )
                         transaction_id = id(cursor)
-                        ProcessJobs.add_job(transaction_id, job, q, at_front)
-                        log('Created split job (%s/%s) on queue %s in %s mode '
-                            '(id:%s): [%s] pool(%s).%s%s '
-                            '(waiting to commit/rollback %s)' % (
-                                idx + 1, len(chunks), q.name, mode, job.id,
-                                dbname, osv_object, fname, tuple(args[2:]),
-                                transaction_id
-                        ))
                     else:
                         job = q.enqueue(
                             task,
@@ -302,6 +309,15 @@ class split_job(job):
                     job.meta['requeue'] = self.requeue
                     job.save()
                     set_hash_job(job)
+                    if self.on_commit:
+                        ProcessJobs.add_job(transaction_id, job, q, at_front)
+                        log('Created split job (%s/%s) on queue %s in %s mode '
+                            '(id:%s): [%s] pool(%s).%s%s '
+                            '(waiting to commit/rollback %s)' % (
+                                idx + 1, len(chunks), q.name, mode, job.id,
+                                dbname, osv_object, fname, tuple(args[2:]),
+                                transaction_id
+                        ))
                     jobs.append(job)
                 return jobs
             else:
