@@ -1,25 +1,6 @@
 # coding=utf-8
-import imp
-import os
-import sys
-import types
 import unittest
-
-
-class FakeLogger(object):
-    def notifyChannel(self, *args, **kwargs):
-        pass
-
-
-class FakeSignal(object):
-    def connect(self, callback):
-        pass
-
-
-class FakeTaskManager(object):
-    @staticmethod
-    def current_task():
-        return None
+from oorq import decorators
 
 
 class FakeNoSuchJobError(Exception):
@@ -59,114 +40,24 @@ class FakeQueue(object):
         self.enqueued.append((self.name, job.id, at_front, self.connection))
 
 
-def install_import_stubs():
-    oorq_package = types.ModuleType('oorq')
-    oorq_package.__path__ = []
-    sys.modules['oorq'] = oorq_package
-
-    oorq_module = types.ModuleType('oorq.oorq')
-    oorq_module.setup_redis_connection = lambda: 'redis-conn'
-    oorq_module.set_hash_job = lambda job: None
-    oorq_module.get_redis_url = lambda conn: 'redis://localhost:6379/0'
-
-    class FakeAsyncMode(object):
-        @staticmethod
-        def is_async():
-            return True
-
-    oorq_module.AsyncMode = FakeAsyncMode
-    sys.modules['oorq.oorq'] = oorq_module
-
-    exceptions = types.ModuleType('oorq.exceptions')
-    sys.modules['oorq.exceptions'] = exceptions
-
-    tasks = types.ModuleType('oorq.tasks')
-    tasks.make_chunks = lambda ids, n_chunks=None, size=None: [ids]
-    tasks.execute = lambda *args, **kwargs: None
-    tasks.isolated_execute = lambda *args, **kwargs: None
-    tasks.update_jobs_group = lambda *args, **kwargs: None
-    sys.modules['oorq.tasks'] = tasks
-
-    rq_module = types.ModuleType('rq')
-    rq_module.Queue = FakeQueue
-    rq_module.get_current_job = lambda: None
-    sys.modules['rq'] = rq_module
-
-    rq_job_module = types.ModuleType('rq.job')
-    rq_job_module.Job = FakeJob
-    sys.modules['rq.job'] = rq_job_module
-
-    rq_exceptions_module = types.ModuleType('rq.exceptions')
-
-    rq_exceptions_module.NoSuchJobError = FakeNoSuchJobError
-    sys.modules['rq.exceptions'] = rq_exceptions_module
-
-    osconf_module = types.ModuleType('osconf')
-    osconf_module.config_from_environment = lambda prefix, **kwargs: kwargs
-    sys.modules['osconf'] = osconf_module
-
-    if 'tools' not in sys.modules:
-        tools = types.ModuleType('tools')
-        tools.config = {'database': 'test'}
-        sys.modules['tools'] = tools
-    if 'netsvc' not in sys.modules:
-        netsvc = types.ModuleType('netsvc')
-        netsvc.LOG_INFO = 20
-        netsvc.LOG_WARNING = 30
-        netsvc.SERVICES = {}
-        netsvc.Logger = FakeLogger
-        sys.modules['netsvc'] = netsvc
-    if 'signals' not in sys.modules:
-        signals = types.ModuleType('signals')
-        signals.DB_CURSOR_COMMIT = FakeSignal()
-        signals.DB_CURSOR_ROLLBACK = FakeSignal()
-        signals.DB_CURSOR_ROLLBACK_SAVEPOINT = FakeSignal()
-        signals.DB_CURSOR_SAVEPOINT = FakeSignal()
-        sys.modules['signals'] = signals
-    if 'autoworker' not in sys.modules:
-        autoworker = types.ModuleType('autoworker')
-        autoworker.AutoWorker = object
-        sys.modules['autoworker'] = autoworker
-    if 'ctx' not in sys.modules:
-        ctx = types.ModuleType('ctx')
-        ctx.sudo = None
-        sys.modules['ctx'] = ctx
-    if 'service' not in sys.modules:
-        service = types.ModuleType('service')
-        sys.modules['service'] = service
-    if 'service.taskmanager' not in sys.modules:
-        taskmanager = types.ModuleType('service.taskmanager')
-        taskmanager.TaskManager = FakeTaskManager
-        sys.modules['service.taskmanager'] = taskmanager
-
-
-def load_decorators_module():
-    install_import_stubs()
-    decorators_path = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), '..', '..', '..', 'decorators.py'
-    ))
-    if 'oorq.decorators' in sys.modules:
-        del sys.modules['oorq.decorators']
-    return imp.load_source('oorq.decorators', decorators_path)
-
-
 class FakeCursor(object):
     pass
 
 
-class TestProcessJobs(unittest.TestCase):
-    MODULES_TO_STUB = [
-        'oorq', 'oorq.decorators', 'oorq.oorq', 'oorq.exceptions',
-        'oorq.tasks', 'rq', 'rq.job', 'rq.exceptions', 'osconf',
-        'tools', 'netsvc', 'signals', 'autoworker', 'ctx', 'service',
-        'service.taskmanager'
-    ]
+_MISSING = object()
 
+
+class TestProcessJobs(unittest.TestCase):
     def setUp(self):
-        self.original_modules = dict(
-            (name, sys.modules.get(name)) for name in self.MODULES_TO_STUB
+        self.decorators = decorators
+        self.original_job = self.decorators.Job
+        self.original_queue = self.decorators.Queue
+        self.original_no_such_job_error = getattr(
+            self.decorators, 'NoSuchJobError', _MISSING
         )
-        self.decorators = load_decorators_module()
+        self.original_setup_redis_connection = (
+            self.decorators.setup_redis_connection
+        )
         self.decorators.ProcessJobs.JOBS_TO_PROCESS = {}
         FakeJob.deleted = []
         FakeJob.fetched = []
@@ -175,14 +66,23 @@ class TestProcessJobs(unittest.TestCase):
         FakeQueue.fail_on_job_ids = set()
         self.decorators.Job = FakeJob
         self.decorators.Queue = FakeQueue
+        self.decorators.NoSuchJobError = FakeNoSuchJobError
         self.decorators.setup_redis_connection = lambda: 'redis-conn'
 
     def tearDown(self):
-        for name, module in self.original_modules.items():
-            if module is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = module
+        self.decorators.Job = self.original_job
+        self.decorators.Queue = self.original_queue
+        if self.original_no_such_job_error is _MISSING:
+            try:
+                del self.decorators.NoSuchJobError
+            except AttributeError:
+                pass
+        else:
+            self.decorators.NoSuchJobError = self.original_no_such_job_error
+        self.decorators.setup_redis_connection = (
+            self.original_setup_redis_connection
+        )
+        self.decorators.ProcessJobs.JOBS_TO_PROCESS = {}
 
     def test_add_job_keeps_minimal_reference_only(self):
         cursor = FakeCursor()
