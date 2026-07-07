@@ -232,3 +232,37 @@ class TestOORQAsync(TestOORQ):
                                    ['active'])
         self.assertEqual(len(res), 6)
         self.assertTrue(all(r['active'] for r in res))
+
+
+class TestOORQSyncOnCommit(TestOORQ):
+    @classmethod
+    def setUpClass(cls):
+        super(TestOORQ, cls).setUpClass()
+        cls.ori_oorq_async = os.environ.get('OORQ_ASYNC', 'True')
+        os.environ['OORQ_ASYNC'] = 'False'
+
+    @classmethod
+    def tearDownClass(cls):
+        os.environ['OORQ_ASYNC'] = cls.ori_oorq_async
+        super(TestOORQ, cls).tearDownClass()
+
+    def test_write_sync_on_commit_waits_for_commit(self):
+        partner_obj = self.openerp.pool.get('res.partner')
+        with Transaction().start(self.database) as txn:
+            cursor = txn.cursor
+            uid = txn.user
+            partner_obj.test_write_async(cursor, uid, self.new_partner_ids,
+                                         {'active': True})
+            res = partner_obj.read(cursor, uid, self.new_partner_ids,
+                                   ['active'])
+            self.assertEqual(len(res), 6)
+            self.assertTrue(all(not r['active'] for r in res))
+            cursor.commit()
+
+        with Transaction().start(self.database) as txn:
+            cursor = txn.cursor
+            uid = txn.user
+            res = partner_obj.read(cursor, uid, self.new_partner_ids,
+                                   ['active'])
+        self.assertEqual(len(res), 6)
+        self.assertTrue(all(r['active'] for r in res))

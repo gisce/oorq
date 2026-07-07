@@ -147,7 +147,7 @@ class job(object):
                     }
                 if current_task and current_task.defer_exit:
                     job_kwargs['current_task_id'] = current_task.id
-                if self.on_commit and async_mode:
+                if self.on_commit:
                     job = Job.create(
                         execute,
                         args=job_args,
