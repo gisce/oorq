@@ -15,7 +15,7 @@ from .utils import get_failed_queue
 
 
 class DummySudo(object):
-    def __enter__(self):
+    def __enter__(self, *args, **kwargs):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -57,6 +57,15 @@ def make_chunks(ids, n_chunks=None, size=None):
         size = int(ceil(len(ids) / n_chunks))
     return [ids[x:x + size] for x in range(0, len(ids), size)]
 
+def get_await_maintenance_class():
+    context_manager = DummySudo
+    try:
+        from service.maintenance_mode import MaintenanceAwait
+        context_manager = MaintenanceAwait
+    except ImportError:
+        pass
+    return context_manager
+
 
 def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     start = datetime.now()
@@ -89,6 +98,7 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         from tools.service_utils import SimpleGlobalUUIDGenerator
     except ImportError:
         SimpleGlobalUUIDGenerator = DummySudo
+    AwaitMaintenance = get_await_maintenance_class()
     # Reset the pool with config connections as limit
     sql_db._Pool = sql_db.ConnectionPool(int(tools.config['db_maxconn']))
     osv_ = osv.osv.osv_pool()
@@ -111,19 +121,20 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         _context_stack.push({})
     context = 'sudo' in kw and Sudo(**kw.pop('sudo')) or DummySudo()
     with context:
-        with SimpleGlobalUUIDGenerator() as _uuid:
-            _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-            with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method, db=db):
-                task_pushed = False
-                if 'current_task_id' in kw:
-                    task_id = kw.pop('current_task_id')
-                    task = Task(task_id)
-                    TASK_CONTEXT_STACK.push(task)
-                    task_pushed = True
-                with SentryCatch(_uuid=_uuid, obj=obj, method=method):
-                    res = osv_.execute(dbname, uid, obj, method, *args, **kw)
-                if task_pushed:
-                    TASK_CONTEXT_STACK.pop()
+        with AwaitMaintenance():
+            with SimpleGlobalUUIDGenerator() as _uuid:
+                _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
+                with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method, db=db):
+                    task_pushed = False
+                    if 'current_task_id' in kw:
+                        task_id = kw.pop('current_task_id')
+                        task = Task(task_id)
+                        TASK_CONTEXT_STACK.push(task)
+                        task_pushed = True
+                    with SentryCatch(_uuid=_uuid, obj=obj, method=method):
+                        res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+                    if task_pushed:
+                        TASK_CONTEXT_STACK.pop()
 
     _context_stack.pop()
     logger.info('Time elapsed: %s' % (datetime.now() - start))
@@ -171,25 +182,27 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     # Ensure args is a list to modify
     args = list(args)
     ids = args[0]
+    AwaitMaintenance = get_await_maintenance_class()
     context = 'sudo' in kw and Sudo(**kw.pop('sudo')) or DummySudo()
     for exe_id in ids:
         try:
             logger.info('Executing id %s' % exe_id)
             args[0] = [exe_id]
             with context:
-                with SimpleGlobalUUIDGenerator() as _uuid:
-                    _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-                    with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method):
-                        task_pushed = False
-                        if 'current_task_id' in kw:
-                            task_id = kw.pop('current_task_id')
-                            task = Task(task_id)
-                            TASK_CONTEXT_STACK.push(task)
-                            task_pushed = True
-                        with SentryCatch(_uuid=_uuid, obj=obj, method=method):
-                            res = osv_.execute(dbname, uid, obj, method, *args, **kw)
-                        if task_pushed:
-                            TASK_CONTEXT_STACK.pop()
+                with AwaitMaintenance():
+                    with SimpleGlobalUUIDGenerator() as _uuid:
+                        _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
+                        with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method):
+                            task_pushed = False
+                            if 'current_task_id' in kw:
+                                task_id = kw.pop('current_task_id')
+                                task = Task(task_id)
+                                TASK_CONTEXT_STACK.push(task)
+                                task_pushed = True
+                            with SentryCatch(_uuid=_uuid, obj=obj, method=method):
+                                res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+                            if task_pushed:
+                                TASK_CONTEXT_STACK.pop()
             all_res.append(res)
         except:
             logger.error('Executing id %s failed' % exe_id)
