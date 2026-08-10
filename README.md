@@ -8,6 +8,11 @@ Using [python-rq](http://python-rq.org/) for OpenObject tasks.
  * For OpenERP v6 the module versions are `v2.X.X` and branch is `api_v6` [![Build Status](https://travis-ci.org/gisce/oorq.png?branch=api_v6)](https://travis-ci.org/gisce/oorq)
  * For OpenERP v7 the module versions are `v3.X.X` and branch is `api_v7` [![Build Status](https://travis-ci.org/gisce/oorq.png?branch=api_v7)](https://travis-ci.org/gisce/oorq)
 
+## DB compatibility (Tested)
+
+- Redis (3, 5, 7, 8M)
+- Valkey (8)
+
 ## Example to do a async write.
 
 ### Add the decorator to the function

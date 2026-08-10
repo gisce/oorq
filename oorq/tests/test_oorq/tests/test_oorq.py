@@ -98,12 +98,20 @@ class TestOORQ(testing.OOTestCase):
         os.environ['OORQ_ASYNC'] = cls.ori_oorq_async
         super(TestOORQ, cls).tearDownClass()
 
+
+class TestOORQAsync(TestOORQ):
+    """
+    Test class for OORQ asynchronous operations.
+    This class inherits from TestOORQ and runs tests in an asynchronous context.
+    """
+
     def test_write_async_on_commit(self):
         partner_obj = self.openerp.pool.get('res.partner')
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
             uid = txn.user
-            partner_obj.test_write_async(cursor, uid, self.new_partner_ids, {'active': True})
+            partner_obj.test_write_async(cursor, uid, self.new_partner_ids,
+                                         {'active': True})
             cursor.commit()
             # This sleep is needed because the enqueue delay
             sleep(2)
@@ -112,7 +120,8 @@ class TestOORQ(testing.OOTestCase):
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
             uid = txn.user
-            res = partner_obj.read(cursor, uid, self.new_partner_ids, ['active'])
+            res = partner_obj.read(cursor, uid, self.new_partner_ids,
+                                   ['active'])
         self.assertEqual(len(res), 6)
         self.assertTrue(all(r['active'] for r in res))
 
@@ -124,11 +133,14 @@ class TestOORQ(testing.OOTestCase):
 
             def simulate_ws():
                 try:
-                    partner_obj.test_no_enqueue_on_rollback(cursor, uid, self.new_partner_ids, {'active': True})
+                    partner_obj.test_no_enqueue_on_rollback(cursor, uid,
+                                                            self.new_partner_ids,
+                                                            {'active': True})
                     cursor.commit()
                 except Exception as e:
                     cursor.rollback()
                     raise e
+
             with self.assertRaises(osv.except_osv):
                 simulate_ws()
             # This sleep is needed because the enqueue delay
@@ -138,7 +150,8 @@ class TestOORQ(testing.OOTestCase):
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
             uid = txn.user
-            res = partner_obj.read(cursor, uid, self.new_partner_ids, ['active'])
+            res = partner_obj.read(cursor, uid, self.new_partner_ids,
+                                   ['active'])
         self.assertEqual(len(res), 6)
         self.assertTrue(all(not r['active'] for r in res))
 
@@ -147,7 +160,8 @@ class TestOORQ(testing.OOTestCase):
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
             uid = txn.user
-            partner_obj.test_write_split(cursor, uid, self.new_partner_ids, {'active': True})
+            partner_obj.test_write_split(cursor, uid, self.new_partner_ids,
+                                         {'active': True})
             # This sleep is needed because the enqueue delay
         sleep(2)
         self._empty_wait()
@@ -155,7 +169,8 @@ class TestOORQ(testing.OOTestCase):
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
             uid = txn.user
-            res = partner_obj.read(cursor, uid, self.new_partner_ids, ['active'])
+            res = partner_obj.read(cursor, uid, self.new_partner_ids,
+                                   ['active'])
         self.assertEqual(len(res), 6)
         self.assertTrue(all(r['active'] for r in res))
 
@@ -164,7 +179,8 @@ class TestOORQ(testing.OOTestCase):
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
             uid = txn.user
-            partner_obj.test_write_split_size(cursor, uid, self.new_partner_ids, {'active': True})
+            partner_obj.test_write_split_size(cursor, uid, self.new_partner_ids,
+                                              {'active': True})
             # This sleep is needed because the enqueue delay
         sleep(2)
         self._empty_wait()
@@ -172,7 +188,8 @@ class TestOORQ(testing.OOTestCase):
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
             uid = txn.user
-            res = partner_obj.read(cursor, uid, self.new_partner_ids, ['active'])
+            res = partner_obj.read(cursor, uid, self.new_partner_ids,
+                                   ['active'])
         self.assertEqual(len(res), 6)
         self.assertTrue(all(r['active'] for r in res))
 
@@ -181,7 +198,8 @@ class TestOORQ(testing.OOTestCase):
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
             uid = txn.user
-            partner_obj.test_dependency_job(cursor, uid, self.new_partner_ids, {'active': True})
+            partner_obj.test_dependency_job(cursor, uid, self.new_partner_ids,
+                                            {'active': True})
             # This sleep is needed because the enqueue delay 10+2
             sleep(14)
         self._empty_wait(timeout=30)
@@ -189,7 +207,8 @@ class TestOORQ(testing.OOTestCase):
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
             uid = txn.user
-            res = partner_obj.read(cursor, uid, self.new_partner_ids, ['active'])
+            res = partner_obj.read(cursor, uid, self.new_partner_ids,
+                                   ['active'])
         self.assertEqual(len(res), 6)
         self.assertTrue(all(r['active'] for r in res))
 
@@ -198,7 +217,9 @@ class TestOORQ(testing.OOTestCase):
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
             uid = txn.user
-            partner_obj.dependency_job_on_commit(cursor, uid, self.new_partner_ids, {'active': True})
+            partner_obj.dependency_job_on_commit(cursor, uid,
+                                                 self.new_partner_ids,
+                                                 {'active': True})
             cursor.commit()
             # This sleep is needed because the enqueue delay 5+2
             sleep(7)
@@ -207,6 +228,41 @@ class TestOORQ(testing.OOTestCase):
         with Transaction().start(self.database) as txn:
             cursor = txn.cursor
             uid = txn.user
-            res = partner_obj.read(cursor, uid, self.new_partner_ids, ['active'])
+            res = partner_obj.read(cursor, uid, self.new_partner_ids,
+                                   ['active'])
+        self.assertEqual(len(res), 6)
+        self.assertTrue(all(r['active'] for r in res))
+
+
+class TestOORQSyncOnCommit(TestOORQ):
+    @classmethod
+    def setUpClass(cls):
+        super(TestOORQ, cls).setUpClass()
+        cls.ori_oorq_async = os.environ.get('OORQ_ASYNC', 'True')
+        os.environ['OORQ_ASYNC'] = 'False'
+
+    @classmethod
+    def tearDownClass(cls):
+        os.environ['OORQ_ASYNC'] = cls.ori_oorq_async
+        super(TestOORQ, cls).tearDownClass()
+
+    def test_write_sync_on_commit_waits_for_commit(self):
+        partner_obj = self.openerp.pool.get('res.partner')
+        with Transaction().start(self.database) as txn:
+            cursor = txn.cursor
+            uid = txn.user
+            partner_obj.test_write_async(cursor, uid, self.new_partner_ids,
+                                         {'active': True})
+            res = partner_obj.read(cursor, uid, self.new_partner_ids,
+                                   ['active'])
+            self.assertEqual(len(res), 6)
+            self.assertTrue(all(not r['active'] for r in res))
+            cursor.commit()
+
+        with Transaction().start(self.database) as txn:
+            cursor = txn.cursor
+            uid = txn.user
+            res = partner_obj.read(cursor, uid, self.new_partner_ids,
+                                   ['active'])
         self.assertEqual(len(res), 6)
         self.assertTrue(all(r['active'] for r in res))
