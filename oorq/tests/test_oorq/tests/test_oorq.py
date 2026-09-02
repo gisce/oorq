@@ -105,6 +105,16 @@ class TestOORQAsync(TestOORQ):
     This class inherits from TestOORQ and runs tests in an asynchronous context.
     """
 
+    def test_job_sets_current_user_context(self):
+        partner_obj = self.openerp.pool.get('res.partner')
+        with Transaction().start(self.database) as txn:
+            uid = txn.user
+            job = partner_obj.get_execution_user(txn.cursor, uid)
+
+        self._empty_wait()
+        job.refresh()
+        self.assertEqual(tuple(job.result), (uid, uid, uid))
+
     def test_write_async_on_commit(self):
         partner_obj = self.openerp.pool.get('res.partner')
         with Transaction().start(self.database) as txn:

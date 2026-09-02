@@ -4,6 +4,7 @@ from __future__ import division
 import os
 import sys
 import traceback
+from contextlib import contextmanager
 from datetime import datetime
 from math import ceil
 
@@ -41,6 +42,17 @@ class SentryCatch(object):
                 scope.set_tag('method', self.method)
                 scope.set_tag('uuid', '{}'.format(self._uuid))
                 sentry_sdk.capture_exception(exc_val)
+
+
+@contextmanager
+def execution_user_context(context_stack, user):
+    current_context = (context_stack.top or {}).copy()
+    current_context['user'] = user
+    context_stack.push(current_context)
+    try:
+        yield
+    finally:
+        context_stack.pop()
 
 
 def make_chunks(ids, n_chunks=None, size=None):
@@ -82,7 +94,7 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import service
     import sql_db
     from ctx import _context_stack
-    from service.security import Sudo
+    from service.security import Sudo, User
     from service.taskmanager import Task, TASK_CONTEXT_STACK
     from tools.service_utils import WebServiceTracker
     try:
@@ -107,25 +119,22 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     if not pool._ready and not AsyncMode.is_async():
         logger.warning('Skipping running sync task because pool is not ready')
         return
-    if _context_stack.top is None:
-        _context_stack.push({})
     context = 'sudo' in kw and Sudo(**kw.pop('sudo')) or DummySudo()
-    with context:
-        with SimpleGlobalUUIDGenerator() as _uuid:
-            _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-            with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method, db=db):
-                task_pushed = False
-                if 'current_task_id' in kw:
-                    task_id = kw.pop('current_task_id')
-                    task = Task(task_id)
-                    TASK_CONTEXT_STACK.push(task)
-                    task_pushed = True
-                with SentryCatch(_uuid=_uuid, obj=obj, method=method):
-                    res = osv_.execute(dbname, uid, obj, method, *args, **kw)
-                if task_pushed:
-                    TASK_CONTEXT_STACK.pop()
-
-    _context_stack.pop()
+    with execution_user_context(_context_stack, User(uid)):
+        with context:
+            with SimpleGlobalUUIDGenerator() as _uuid:
+                _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
+                with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method, db=db):
+                    task_pushed = False
+                    if 'current_task_id' in kw:
+                        task_id = kw.pop('current_task_id')
+                        task = Task(task_id)
+                        TASK_CONTEXT_STACK.push(task)
+                        task_pushed = True
+                    with SentryCatch(_uuid=_uuid, obj=obj, method=method):
+                        res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+                    if task_pushed:
+                        TASK_CONTEXT_STACK.pop()
     logger.info('Time elapsed: %s' % (datetime.now() - start))
     sql_db.close_db(dbname)
     return res
@@ -148,7 +157,8 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     import workflow
     import report
     import service
-    from service.security import Sudo
+    from ctx import _context_stack
+    from service.security import Sudo, User
     from service.taskmanager import Task, TASK_CONTEXT_STACK
     from tools.service_utils import WebServiceTracker
     import sql_db
@@ -176,20 +186,21 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
         try:
             logger.info('Executing id %s' % exe_id)
             args[0] = [exe_id]
-            with context:
-                with SimpleGlobalUUIDGenerator() as _uuid:
-                    _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-                    with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method):
-                        task_pushed = False
-                        if 'current_task_id' in kw:
-                            task_id = kw.pop('current_task_id')
-                            task = Task(task_id)
-                            TASK_CONTEXT_STACK.push(task)
-                            task_pushed = True
-                        with SentryCatch(_uuid=_uuid, obj=obj, method=method):
-                            res = osv_.execute(dbname, uid, obj, method, *args, **kw)
-                        if task_pushed:
-                            TASK_CONTEXT_STACK.pop()
+            with execution_user_context(_context_stack, User(uid)):
+                with context:
+                    with SimpleGlobalUUIDGenerator() as _uuid:
+                        _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
+                        with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method):
+                            task_pushed = False
+                            if 'current_task_id' in kw:
+                                task_id = kw.pop('current_task_id')
+                                task = Task(task_id)
+                                TASK_CONTEXT_STACK.push(task)
+                                task_pushed = True
+                            with SentryCatch(_uuid=_uuid, obj=obj, method=method):
+                                res = osv_.execute(dbname, uid, obj, method, *args, **kw)
+                            if task_pushed:
+                                TASK_CONTEXT_STACK.pop()
             all_res.append(res)
         except:
             logger.error('Executing id %s failed' % exe_id)
@@ -227,6 +238,8 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     import report
     import service
     import sql_db
+    from ctx import _context_stack
+    from service.security import User
     try:
         from tools.service_utils import SimpleGlobalUUIDGenerator
     except ImportError:
@@ -248,11 +261,12 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     obj = netsvc.LocalService('report.'+obj)
     if 'model' not in datas:
         datas['model'] = getattr(obj._service, 'table', False) or getattr(obj._service, 'model', False)
-    with SimpleGlobalUUIDGenerator() as _uuid:
-        _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-        with WebServiceTracker(_uuid=_uuid, uid=uid, obj=_obj_name, method='report', db=conn) as wst:
-            with SentryCatch(_uuid=_uuid, obj=_obj_name, method='report'):
-                result, format = obj.create(cursor, uid, ids, datas, context)
+    with execution_user_context(_context_stack, User(uid)):
+        with SimpleGlobalUUIDGenerator() as _uuid:
+            _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
+            with WebServiceTracker(_uuid=_uuid, uid=uid, obj=_obj_name, method='report', db=conn) as wst:
+                with SentryCatch(_uuid=_uuid, obj=_obj_name, method='report'):
+                    result, format = obj.create(cursor, uid, ids, datas, context)
     job.meta['format'] = format
     job.save()
     cursor.close()

@@ -36,6 +36,15 @@ class ResPartner(osv.osv):
         self.write_async(cursor, uid, ids, vals, context)
         raise osv.except_osv('Error', 'Test error!')
 
+    @job(queue='default')
+    def get_execution_user(self, cursor, uid, context=None):
+        from ctx import current_user, sudo
+        with Sudo():
+            default_sudo_uid = sudo.uid
+        with Sudo(current_user, gid='base.group_user'):
+            explicit_sudo_uid = sudo.uid
+        return current_user.uid, default_sudo_uid, explicit_sudo_uid
+
     @job(queue='default', on_commit=True)
     def write_async(self, cr, user, ids, vals, context=None):
         #TODO: process before updating resource
