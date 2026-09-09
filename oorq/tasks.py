@@ -58,6 +58,14 @@ def make_chunks(ids, n_chunks=None, size=None):
     return [ids[x:x + size] for x in range(0, len(ids), size)]
 
 
+def _webservice_tracker_kwargs(conf_attrs, **kwargs):
+    """Propagate the server query engine snapshot to worker trackers."""
+    query_engine = conf_attrs.get('global_query_engine', False)
+    if query_engine:
+        kwargs['ooquery_strategy'] = query_engine
+    return kwargs
+
+
 def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     start = datetime.now()
     # Disabling logging in OpenERP
@@ -113,7 +121,11 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     with context:
         with SimpleGlobalUUIDGenerator() as _uuid:
             _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-            with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method, db=db):
+            tracker_kwargs = _webservice_tracker_kwargs(
+                conf_attrs, _uuid=_uuid, uid=uid, obj=obj,
+                method=method, db=db,
+            )
+            with WebServiceTracker(**tracker_kwargs):
                 task_pushed = False
                 if 'current_task_id' in kw:
                     task_id = kw.pop('current_task_id')
@@ -179,7 +191,11 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
             with context:
                 with SimpleGlobalUUIDGenerator() as _uuid:
                     _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-                    with WebServiceTracker(_uuid=_uuid, uid=uid, obj=obj, method=method):
+                    tracker_kwargs = _webservice_tracker_kwargs(
+                        conf_attrs, _uuid=_uuid, uid=uid, obj=obj,
+                        method=method,
+                    )
+                    with WebServiceTracker(**tracker_kwargs):
                         task_pushed = False
                         if 'current_task_id' in kw:
                             task_id = kw.pop('current_task_id')
@@ -250,7 +266,11 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
         datas['model'] = getattr(obj._service, 'table', False) or getattr(obj._service, 'model', False)
     with SimpleGlobalUUIDGenerator() as _uuid:
         _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-        with WebServiceTracker(_uuid=_uuid, uid=uid, obj=_obj_name, method='report', db=conn) as wst:
+        tracker_kwargs = _webservice_tracker_kwargs(
+            conf_attrs, _uuid=_uuid, uid=uid, obj=_obj_name,
+            method='report', db=conn,
+        )
+        with WebServiceTracker(**tracker_kwargs) as wst:
             with SentryCatch(_uuid=_uuid, obj=_obj_name, method='report'):
                 result, format = obj.create(cursor, uid, ids, datas, context)
     job.meta['format'] = format
