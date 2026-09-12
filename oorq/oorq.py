@@ -159,10 +159,21 @@ def setup_redis_connection():
         if config.get('redis_url', False):
             oorq_log('Connecting to redis using redis_url: %s'
                      % config['redis_url'])
-            redis_conn = from_url(config['redis_url'])
+            redis_conn = from_url(
+                config['redis_url'],
+                socket_connect_timeout=10,  # Timeout for establishing a connection, in seconds
+                # socket_timeout=5,  # Timeout for socket operations, in seconds
+                socket_keepalive=True,  # Keeps the connection alive
+                retry_on_timeout=True  # Retries if a timeout is encountered
+            )
         else:
             oorq_log('Connecting to redis using defaults')
-            redis_conn = Redis()
+            redis_conn = Redis(
+                socket_connect_timeout=10,  # Timeout for establishing a connection, in seconds
+                # socket_timeout=5,  # Timeout for socket operations, in seconds
+                socket_keepalive=True,  # Keeps the connection alive
+                retry_on_timeout=True  # Retries if a timeout is encountered
+            )
         push_connection(redis_conn)
     ssl_redis_connection = config.get('ssl_redis_connection', False) or False
     autoworker_redis_url = config.get('autoworker_redis_url', False) or False
