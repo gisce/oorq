@@ -1,11 +1,65 @@
+from copy import copy
+from logging import Filter
+
 from rq import Worker as RQWorker
+from rq.job import Job as RQJob
+try:
+    from rq.exceptions import DeserializationError
+except ImportError:
+    from rq.exceptions import UnpickleError as DeserializationError
 import sys
+
+
+CONFIG_TASKS = (
+    'oorq.tasks.execute', 'oorq.tasks.isolated_execute',
+    'oorq.tasks.report', 'oorq.tasks.update_jobs_group',
+)
+
+
+class WorkerLogFilter(Filter):
+    def filter(self, record):
+        # RQ also attaches the raw arguments to exception log records.
+        if getattr(record, 'func', None) in CONFIG_TASKS:
+            record.arguments = record.arguments[1:]
+            record.kwargs = dict(
+                (key, value) for key, value in record.kwargs.items()
+                if key != 'conf_attrs'
+            )
+        return True
+
+
+class WorkerJob(RQJob):
+    """Keep server configuration out of descriptions logged by RQ."""
+
+    def restore(self, raw_data):
+        super(WorkerJob, self).restore(raw_data)
+        try:
+            if self.func_name not in CONFIG_TASKS:
+                return
+            # Preserve execution data and hashes; only change the displayed call.
+            displayed_job = copy(self)
+            displayed_job.args = self.args[1:]
+            displayed_job.kwargs = dict(
+                (key, value) for key, value in self.kwargs.items()
+                if key != 'conf_attrs'
+            )
+            self.description = displayed_job.get_call_string()
+        except DeserializationError:
+            # The saved description may contain configuration too.
+            self.description = '<DeserializationError>'
 
 
 class Worker(RQWorker):
 
+    job_class = WorkerJob
+    log_filter = WorkerLogFilter()
+
     def __init__(self, *args, **kwargs):
         super(Worker, self).__init__(*args, **kwargs)
+        # The RQ CLI explicitly passes its default Job class.
+        if self.job_class is RQJob:
+            self.job_class = WorkerJob
+        self.log.addFilter(self.log_filter)
         sys.argv = sys.argv[:1]
         import netsvc
         import tools
