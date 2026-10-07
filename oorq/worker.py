@@ -10,11 +10,25 @@ except ImportError:
     from rq.exceptions import UnpickleError as DeserializationError
 import sys
 
+try:
+    string_types = (basestring,)
+except NameError:
+    string_types = (str,)
+
 
 CONFIG_TASKS = (
     'oorq.tasks.execute', 'oorq.tasks.isolated_execute',
     'oorq.tasks.report', 'oorq.tasks.update_jobs_group',
 )
+PERSISTENT_WORKER_CONFIG = 'oorq_persistent_worker'
+TRUE_CONFIG_VALUES = (True, 1, '1', 'true', 'yes', 'on')
+FALSE_CONFIG_VALUES = (False, 0, None, '', '0', 'false', 'no', 'off')
+
+
+def _call_unbound(method, instance, *args):
+    """Call an RQ implementation with a compatible Python 2/3 binding."""
+    function = getattr(method, 'im_func', method)
+    return function(instance, *args)
 
 
 class WorkerLogFilter(Filter):
@@ -54,6 +68,8 @@ class ERPWorkerMixin(object):
 
     job_class = WorkerJob
     log_filter = WorkerLogFilter()
+    persistent = False
+    select_worker_from_config = False
 
     def __init__(self, *args, **kwargs):
         super(ERPWorkerMixin, self).__init__(*args, **kwargs)
@@ -65,6 +81,16 @@ class ERPWorkerMixin(object):
         import netsvc
         import tools
         tools.config.parse()
+        self.persistent = self._persistent_worker_enabled(tools.config)
+        effective_worker = (
+            'PersistentWorker' if self.persistent else 'NoPersistentWorker'
+        )
+        self.log.info(
+            'oorq worker strategy: %s (%s=%r)',
+            effective_worker,
+            PERSISTENT_WORKER_CONFIG,
+            tools.config.options.get(PERSISTENT_WORKER_CONFIG),
+        )
         import pooler
         from tools import config
         import osv
@@ -97,6 +123,22 @@ class ERPWorkerMixin(object):
         except ImportError:
             pass
 
+    def _persistent_worker_enabled(self, config):
+        if not self.select_worker_from_config:
+            return self.persistent
+
+        value = config.options.get(PERSISTENT_WORKER_CONFIG)
+        if isinstance(value, string_types):
+            value = value.strip().lower()
+        enabled = value in TRUE_CONFIG_VALUES
+        if value not in TRUE_CONFIG_VALUES + FALSE_CONFIG_VALUES:
+            self.log.warning(
+                'Invalid %s value %r; using NoPersistentWorker',
+                PERSISTENT_WORKER_CONFIG,
+                value,
+            )
+        return enabled
+
     def request_stop(self, signum, frame):
         try:
             from signals import SHUTDOWN_REQUEST
@@ -109,9 +151,41 @@ class ERPWorkerMixin(object):
         super(ERPWorkerMixin, self).request_stop(signum, frame)
 
 
-class Worker(ERPWorkerMixin, RQWorker):
-    """Default worker, preserving RQ's forked work horse isolation."""
+class NoPersistentWorker(ERPWorkerMixin, RQWorker):
+    """Worker that preserves RQ's forked work horse isolation."""
 
 
 class PersistentWorker(ERPWorkerMixin, RQSimpleWorker):
     """Opt-in worker that executes consecutive jobs in the same process."""
+
+    persistent = True
+
+
+class Worker(NoPersistentWorker):
+    """Stable CLI entry point selecting its execution strategy after bootstrap.
+
+    The object remains an RQ ``Worker`` (and a ``NoPersistentWorker``) so RQ's
+    lifecycle and introspection stay stable.  Only the execution method is
+    selected late, once the ERP configuration has been parsed.
+    """
+
+    select_worker_from_config = True
+
+    def execute_job(self, job, queue):
+        if self.persistent:
+            return _call_unbound(
+                RQSimpleWorker.execute_job, self, job, queue
+            )
+        return _call_unbound(
+            NoPersistentWorker.execute_job, self, job, queue
+        )
+
+if 'get_heartbeat_ttl' in RQSimpleWorker.__dict__:
+    def get_heartbeat_ttl(self, job):
+        if self.persistent:
+            return _call_unbound(
+                RQSimpleWorker.get_heartbeat_ttl, self, job
+            )
+        return _call_unbound(RQWorker.get_heartbeat_ttl, self, job)
+
+    Worker.get_heartbeat_ttl = get_heartbeat_ttl
