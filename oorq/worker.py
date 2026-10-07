@@ -4,16 +4,12 @@ from logging import Filter
 from rq import Worker as RQWorker
 from rq.worker import SimpleWorker as RQSimpleWorker
 from rq.job import Job as RQJob
+from six import string_types
 try:
     from rq.exceptions import DeserializationError
 except ImportError:
     from rq.exceptions import UnpickleError as DeserializationError
 import sys
-
-try:
-    string_types = (basestring,)
-except NameError:
-    string_types = (str,)
 
 
 CONFIG_TASKS = (
