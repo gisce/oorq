@@ -2,6 +2,7 @@ from copy import copy
 from logging import Filter
 
 from rq import Worker as RQWorker
+from rq.worker import SimpleWorker as RQSimpleWorker
 from rq.job import Job as RQJob
 try:
     from rq.exceptions import DeserializationError
@@ -49,13 +50,13 @@ class WorkerJob(RQJob):
             self.description = '<DeserializationError>'
 
 
-class Worker(RQWorker):
+class ERPWorkerMixin(object):
 
     job_class = WorkerJob
     log_filter = WorkerLogFilter()
 
     def __init__(self, *args, **kwargs):
-        super(Worker, self).__init__(*args, **kwargs)
+        super(ERPWorkerMixin, self).__init__(*args, **kwargs)
         # The RQ CLI explicitly passes its default Job class.
         if self.job_class is RQJob:
             self.job_class = WorkerJob
@@ -105,4 +106,12 @@ class Worker(RQWorker):
             SHUTDOWN_REQUEST.send(signum, frame=frame)
         except ImportError:
             pass
-        super(Worker, self).request_stop(signum, frame)
+        super(ERPWorkerMixin, self).request_stop(signum, frame)
+
+
+class Worker(ERPWorkerMixin, RQWorker):
+    """Default worker, preserving RQ's forked work horse isolation."""
+
+
+class PersistentWorker(ERPWorkerMixin, RQSimpleWorker):
+    """Opt-in worker that executes consecutive jobs in the same process."""

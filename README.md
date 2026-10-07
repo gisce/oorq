@@ -40,4 +40,19 @@ ResPartner()
 $ PYTHONPATH=~/Projects/OpenERP/server/bin:~/Projects/OpenERP/server/bin/addons rq worker
 ```
 
+The default worker keeps RQ's process isolation and executes every job in a
+forked work horse. Homogeneous queues whose jobs reliably clean up all SQL,
+ERP context, sudo and logging state can opt into a persistent process:
+
+```sh
+$ PYTHONPATH=~/Projects/OpenERP/server/bin:~/Projects/OpenERP/server/bin/addons \
+    rq worker -w oorq.worker.PersistentWorker queue_name
+```
+
+`PersistentWorker` uses RQ's `SimpleWorker`, so consecutive jobs can reuse
+in-memory ERP caches. A leaked transaction or process-global context can also
+affect the next job. Keep the default `oorq.worker.Worker` for heterogeneous,
+memory-heavy, untrusted or native-code jobs, and roll out persistent workers
+gradually under a process supervisor.
+
 **Do fun things :)**
