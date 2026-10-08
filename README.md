@@ -64,10 +64,18 @@ $ PYTHONPATH=~/Projects/OpenERP/server/bin:~/Projects/OpenERP/server/bin/addons 
 ```
 
 `PersistentWorker` uses RQ's `SimpleWorker`, so consecutive jobs can reuse
-in-memory ERP caches. A leaked transaction or process-global context can also
-affect the next job. Keep the default `oorq.worker.Worker` for heterogeneous,
-memory-heavy, untrusted or native-code jobs, and roll out persistent workers
-gradually under a process supervisor.
+the SQL connection pool and in-memory ERP caches. After every job, oorq restores
+the previous thread database marker. Successful jobs keep the database-scoped
+ERP caches; failed jobs invalidate them because they may contain values produced
+by the transaction that ERP rolls back while closing its managed cursor. This
+cleanup never calls `sql_db.close_db()` or `_Pool.close_all()`.
+
+ERP's normal `osv.execute()` path owns its cursor and commits or rolls it back
+before closing it. Business code that creates unmanaged cursors, threads or
+other process-global state remains unsafe for a persistent worker; recycle that
+worker after such a failure. Keep the default `oorq.worker.Worker` for
+heterogeneous, memory-heavy, untrusted or native-code jobs, and roll out
+persistent workers gradually under a process supervisor.
 
 For immediate rollback, set `oorq_persistent_worker = false` or bypass automatic
 selection explicitly with `rq worker -w oorq.worker.NoPersistentWorker`. Use

@@ -7,6 +7,7 @@ import traceback
 from contextlib import contextmanager
 from datetime import datetime
 from math import ceil
+from threading import current_thread
 
 from rq import get_current_job
 from rq.job import Job
@@ -123,6 +124,10 @@ def _webservice_tracker_kwargs(conf_attrs, **kwargs):
 
 def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     start = datetime.now()
+    thread = current_thread()
+    missing = object()
+    previous_dbname = getattr(thread, 'dbname', missing)
+    tools = None
     # Disabling logging in OpenERP
     import logging
     disable_level = logging.root.manager.disable
@@ -209,7 +214,24 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
                                     return osv_.execute(
                                         dbname, uid, obj, method, *args, **kw
                                     )
+    except BaseException:
+        if tools is not None:
+            try:
+                # Successful jobs may reuse ERP caches.  Values populated by
+                # a failed transaction are unsafe because the cursor has
+                # already rolled back by the time execute() unwinds.
+                tools.cache.clean_caches_for_db(dbname)
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    'Unable to invalidate ERP caches after failed job'
+                )
+        raise
     finally:
+        if previous_dbname is missing:
+            if hasattr(thread, 'dbname'):
+                delattr(thread, 'dbname')
+        else:
+            thread.dbname = previous_dbname
         logging.disable(logging.NOTSET)
         try:
             logging.disable(logging.NOTSET)
