@@ -41,8 +41,22 @@ $ PYTHONPATH=~/Projects/OpenERP/server/bin:~/Projects/OpenERP/server/bin/addons 
 ```
 
 The default worker keeps RQ's process isolation and executes every job in a
-forked work horse. Homogeneous queues whose jobs reliably clean up all SQL,
-ERP context, sudo and logging state can opt into a persistent process:
+forked work horse. The stable `oorq.worker.Worker` entry point can select a
+persistent process from the ERP configuration after `tools.config.parse()`:
+
+```ini
+[options]
+oorq_persistent_worker = true
+```
+
+The default is false. Accepted true values are `true`, `1`, `yes` and `on`;
+accepted false values are `false`, `0`, `no` and `off` (case-insensitive).
+Absent, empty and invalid values select `NoPersistentWorker`. As with other ERP
+options, `OPENERP_OORQ_PERSISTENT_WORKER` overrides the configuration file.
+Startup logs report the effective strategy.
+
+Homogeneous queues whose jobs reliably clean up all SQL, ERP context, sudo and
+logging state can also select the persistent implementation explicitly:
 
 ```sh
 $ PYTHONPATH=~/Projects/OpenERP/server/bin:~/Projects/OpenERP/server/bin/addons \
@@ -54,5 +68,11 @@ in-memory ERP caches. A leaked transaction or process-global context can also
 affect the next job. Keep the default `oorq.worker.Worker` for heterogeneous,
 memory-heavy, untrusted or native-code jobs, and roll out persistent workers
 gradually under a process supervisor.
+
+For immediate rollback, set `oorq_persistent_worker = false` or bypass automatic
+selection explicitly with `rq worker -w oorq.worker.NoPersistentWorker`. Use
+`rq worker -w oorq.worker.PersistentWorker` only for diagnosis or an intentional
+opt-in. Production activation remains blocked on the hardening, recycling and
+observability work tracked in issue #144.
 
 **Do fun things :)**
