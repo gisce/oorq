@@ -3,11 +3,20 @@
 
 import logging
 import os
-from rq.compat import is_python_version
+try:
+    from rq.compat import is_python_version
+except ImportError:
+    import sys
+
+    def is_python_version(*versions):
+        return sys.version_info[:2] in versions
 if is_python_version((2, 7), (3, 2)):
     import unittest
 else:
-    import unittest2 as unittest  # noqa
+    try:
+        import unittest2 as unittest  # noqa
+    except ImportError:
+        import unittest
 
 from redis import StrictRedis
 from rq import push_connection, pop_connection
