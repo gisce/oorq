@@ -239,6 +239,27 @@ def test_erp_paths_are_idempotent(monkeypatch):
         sys.path[:] = original
 
 
+def test_isolated_execute_stops_after_job_timeout(monkeypatch):
+    context_stack = LocalStack()
+    task_stack = LocalStack()
+    executed_ids = []
+
+    def timeout_first_id(*args, **kwargs):
+        executed_ids.extend(args[-1])
+        raise tasks.JobTimeoutException('deadline')
+
+    install_erp_modules(
+        monkeypatch, timeout_first_id, context_stack, task_stack, [],
+    )
+
+    with pytest.raises(tasks.JobTimeoutException, match='deadline'):
+        tasks.isolated_execute(
+            {}, 'database', 1, 'model', 'method', [1, 2],
+        )
+
+    assert executed_ids == [1]
+
+
 def test_other_entrypoints_restore_process_state(monkeypatch):
     context_stack = LocalStack()
     task_stack = LocalStack()

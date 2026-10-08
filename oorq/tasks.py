@@ -12,6 +12,7 @@ from threading import current_thread
 
 from rq import get_current_job
 from rq.job import Job
+from rq.timeouts import JobTimeoutException
 from .exceptions import *
 from .oorq import StoredJobsPool, setup_redis_connection, AsyncMode
 from .utils import get_failed_queue
@@ -364,6 +365,8 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
                                             *args, **kw
                                         )
             all_res.append(res)
+        except JobTimeoutException:
+            raise
         except:
             logger.error('Executing id %s failed' % exe_id)
             failed_ids.append(exe_id)
