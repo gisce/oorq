@@ -159,7 +159,7 @@ class ERPWorkerMixin(object):
             pass
 
     def work(self, *args, **kwargs):
-        """Apply the configured recycle limit unless the CLI overrides it."""
+        """Apply the recycle limit and stop ERP services before exiting."""
         if self.persistent:
             args = list(args)
             if len(args) >= 5:
@@ -174,7 +174,20 @@ class ERPWorkerMixin(object):
                     kwargs.get('max_jobs', args[4] if len(args) >= 5 else
                                self.persistent_max_jobs),
                 )
-        return super(ERPWorkerMixin, self).work(*args, **kwargs)
+        worked = super(ERPWorkerMixin, self).work(*args, **kwargs)
+        if self.persistent:
+            self.log.info('Persistent worker finished; stopping ERP services')
+            self._request_erp_shutdown()
+        return worked
+
+    def _request_erp_shutdown(self):
+        """Stop PubSub and other ERP services after RQ leaves its work loop."""
+        try:
+            from signals import SHUTDOWN_REQUEST
+            SHUTDOWN_REQUEST.send(exit_code=0)
+        except TypeError:
+            # Backwards compatible with receivers without ``exit_code``.
+            SHUTDOWN_REQUEST.send()
 
     def perform_job(self, *args, **kwargs):
         succeeded = super(ERPWorkerMixin, self).perform_job(*args, **kwargs)

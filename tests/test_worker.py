@@ -133,6 +133,7 @@ def test_persistent_worker_applies_limit_without_overriding_cli(monkeypatch):
     calls = []
     worker = persistent_worker_state()
     worker.persistent_max_jobs = 100
+    monkeypatch.setattr(worker, '_request_erp_shutdown', lambda: None)
     monkeypatch.setattr(
         SimpleWorker, 'work',
         lambda self, *args, **kwargs: calls.append(kwargs['max_jobs']),
@@ -142,6 +143,40 @@ def test_persistent_worker_applies_limit_without_overriding_cli(monkeypatch):
     worker.work(max_jobs=7)
 
     assert calls == [100, 7]
+
+
+def test_persistent_worker_stops_erp_services_after_rq_work(monkeypatch):
+    calls = []
+    worker = persistent_worker_state()
+    worker.persistent_max_jobs = 100
+    monkeypatch.setattr(
+        SimpleWorker, 'work',
+        lambda self, *args, **kwargs: calls.append('rq_teardown') or True,
+    )
+    monkeypatch.setattr(
+        worker, '_request_erp_shutdown',
+        lambda: calls.append('erp_shutdown'),
+    )
+
+    assert worker.work() is True
+    assert calls == ['rq_teardown', 'erp_shutdown']
+
+
+def test_non_persistent_worker_does_not_stop_erp_services_after_rq_work(
+        monkeypatch):
+    calls = []
+    worker = worker_with_config(False)
+    worker.persistent_max_jobs = 100
+    monkeypatch.setattr(
+        RQWorker, 'work',
+        lambda self, *args, **kwargs: calls.append('rq') or True,
+    )
+    monkeypatch.setattr(
+        worker, '_request_erp_shutdown', lambda: calls.append('erp_shutdown'),
+    )
+
+    assert worker.work() is True
+    assert calls == ['rq']
 
 
 def test_failed_job_marks_persistent_worker_for_orderly_recycle(monkeypatch):
