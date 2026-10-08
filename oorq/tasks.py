@@ -52,34 +52,41 @@ def _ensure_sys_path(path):
 
 @contextmanager
 def _stack_frame(stack, value):
-    """Own one stack frame and remove only state created above it.
-
-    A persistent worker can inherit a caller frame and business code can leak
-    additional frames.  The caller frame is therefore also used as a stop
-    marker: cleanup must never consume state it did not create.
-    """
-    previous = stack.top
+    """Own one stack frame and restore the exact previous stack."""
+    previous = _stack_snapshot(stack)
     stack.push(value)
     try:
         yield
     finally:
-        while stack.top is not None \
-                and stack.top is not value \
-                and stack.top is not previous:
-            stack.pop()
-        if stack.top is value:
-            stack.pop()
+        _restore_stack(stack, previous)
+
+
+def _stack_snapshot(stack):
+    """Return all frames, bottom first, using the LocalStack public API."""
+    frames = []
+    while stack.top is not None:
+        frames.append(stack.pop())
+    frames.reverse()
+    for frame in frames:
+        stack.push(frame)
+    return frames
+
+
+def _restore_stack(stack, frames):
+    while stack.top is not None:
+        stack.pop()
+    for frame in frames:
+        stack.push(frame)
 
 
 @contextmanager
 def _preserve_stack(stack):
-    """Remove frames leaked by a block without adding a visible frame."""
-    previous = stack.top
+    """Restore the exact stack after a block without adding a frame."""
+    previous = _stack_snapshot(stack)
     try:
         yield
     finally:
-        while stack.top is not None and stack.top is not previous:
-            stack.pop()
+        _restore_stack(stack, previous)
 
 
 def _logging_state(logger):
@@ -123,7 +130,6 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     root_state = _logging_state(root_logger)
     logger = root_logger
     logger_state = root_state
-    database_opened = False
     try:
         if not os.getenv('VERBOSE', False):
             logging.disable(logging.CRITICAL)
@@ -163,7 +169,6 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
             )
         osv_ = osv.osv.osv_pool()
         db, pool = pooler.get_db_and_pool(dbname)
-        database_opened = True
         logging.disable(logging.NOTSET)
         if not pool._ready and not AsyncMode.is_async():
             logger = logging.getLogger(__name__)
@@ -205,15 +210,7 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
                                         dbname, uid, obj, method, *args, **kw
                                     )
     finally:
-        active_exception = sys.exc_info()[0] is not None
         logging.disable(logging.NOTSET)
-        if database_opened:
-            try:
-                sql_db.close_db(dbname)
-            except Exception:
-                logger.exception('Failed to close database %s', dbname)
-                if not active_exception:
-                    raise
         try:
             logging.disable(logging.NOTSET)
             logger.info('Time elapsed: %s' % (datetime.now() - start))

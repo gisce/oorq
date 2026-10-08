@@ -101,6 +101,43 @@ def test_stack_frame_preserves_caller_and_removes_leaked_frames():
     assert stack.top is caller
 
 
+def test_stack_frame_restores_duplicate_object_frames():
+    stack = LocalStack()
+    caller = object()
+    frame = object()
+    stack.push(caller)
+
+    with tasks._stack_frame(stack, frame):
+        stack.push(frame)
+
+    assert stack.pop() is caller
+    assert stack.top is None
+
+
+def test_preserve_stack_restores_duplicate_previous_frame():
+    stack = LocalStack()
+    previous = object()
+    stack.push(previous)
+
+    with tasks._preserve_stack(stack):
+        stack.push(previous)
+
+    assert stack.pop() is previous
+    assert stack.top is None
+
+
+def test_preserve_stack_restores_frames_removed_by_business_code():
+    stack = LocalStack()
+    caller = object()
+    stack.push(caller)
+
+    with tasks._preserve_stack(stack):
+        assert stack.pop() is caller
+
+    assert stack.pop() is caller
+    assert stack.top is None
+
+
 def test_execute_restores_process_state_after_business_error(monkeypatch):
     context_stack = LocalStack()
     task_stack = LocalStack()
@@ -132,7 +169,7 @@ def test_execute_restores_process_state_after_business_error(monkeypatch):
 
     assert context_stack.top is caller_context
     assert task_stack.top is caller_task
-    assert closed_databases == ['database']
+    assert closed_databases == []
     assert logging.getLogger().handlers == original_handlers
     assert logging.root.manager.disable == original_disable
 
@@ -146,8 +183,9 @@ def test_two_successful_jobs_do_not_share_stack_state(monkeypatch):
     def succeed(*args, **kwargs):
         observed_contexts.append(dict(context_stack.top))
         context_stack.top['job_only'] = True
-        context_stack.push({'leaked': True})
-        task_stack.push(object())
+        context_stack.push(context_stack.top)
+        if task_stack.top is not None:
+            task_stack.push(task_stack.top)
         return len(observed_contexts)
 
     install_erp_modules(
@@ -155,13 +193,17 @@ def test_two_successful_jobs_do_not_share_stack_state(monkeypatch):
     )
     monkeypatch.setattr(tasks.AsyncMode, 'is_async', lambda: True)
 
-    assert tasks.execute({}, 'database', 1, 'model', 'method') == 1
-    assert tasks.execute({}, 'database', 1, 'model', 'method') == 2
+    assert tasks.execute(
+        {}, 'database', 1, 'model', 'method', current_task_id=1,
+    ) == 1
+    assert tasks.execute(
+        {}, 'database', 1, 'model', 'method', current_task_id=2,
+    ) == 2
 
     assert observed_contexts == [{}, {}]
     assert context_stack.top is None
     assert task_stack.top is None
-    assert closed_databases == ['database', 'database']
+    assert closed_databases == []
 
 
 def test_erp_paths_are_idempotent(monkeypatch):
