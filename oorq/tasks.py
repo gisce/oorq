@@ -4,6 +4,7 @@ from __future__ import division
 import os
 import sys
 import traceback
+from contextlib import contextmanager
 from datetime import datetime
 from math import ceil
 
@@ -43,6 +44,60 @@ class SentryCatch(object):
                 sentry_sdk.capture_exception(exc_val)
 
 
+def _ensure_sys_path(path):
+    """Add an ERP import path once, preserving its existing position."""
+    if path not in sys.path:
+        sys.path.insert(1, path)
+
+
+@contextmanager
+def _stack_frame(stack, value):
+    """Own one stack frame and restore the exact previous stack."""
+    previous = _stack_snapshot(stack)
+    stack.push(value)
+    try:
+        yield
+    finally:
+        _restore_stack(stack, previous)
+
+
+def _stack_snapshot(stack):
+    """Return all frames, bottom first, using the LocalStack public API."""
+    frames = []
+    while stack.top is not None:
+        frames.append(stack.pop())
+    frames.reverse()
+    for frame in frames:
+        stack.push(frame)
+    return frames
+
+
+def _restore_stack(stack, frames):
+    while stack.top is not None:
+        stack.pop()
+    for frame in frames:
+        stack.push(frame)
+
+
+@contextmanager
+def _preserve_stack(stack):
+    """Restore the exact stack after a block without adding a frame."""
+    previous = _stack_snapshot(stack)
+    try:
+        yield
+    finally:
+        _restore_stack(stack, previous)
+
+
+def _logging_state(logger):
+    return logger.level, list(logger.handlers), logger.propagate, logger.disabled
+
+
+def _restore_logging_state(logger, state):
+    logger.level, handlers, logger.propagate, logger.disabled = state
+    logger.handlers = handlers
+
+
 def make_chunks(ids, n_chunks=None, size=None):
     """Do chunks from ids.
 
@@ -70,77 +125,100 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     start = datetime.now()
     # Disabling logging in OpenERP
     import logging
-    if not os.getenv('VERBOSE', False):
-        logging.disable(logging.CRITICAL)
-    import netsvc
-    import tools
-    for attr, value in conf_attrs.items():
-        tools.config[attr] = value
-    _ad = os.path.abspath(os.path.join(tools.config['root_path'], 'addons'))
-    ad = os.path.abspath(tools.config['addons_path'])
-
-    sys.path.insert(1, _ad)
-    if ad != _ad:
-        sys.path.insert(1, ad)
-    import pooler
-    from tools import config
-    import osv
-    import workflow
-    import report
-    import service
-    import sql_db
-    from ctx import _context_stack
-    from service.security import Sudo
-    from service.taskmanager import Task, TASK_CONTEXT_STACK
-    from tools.service_utils import WebServiceTracker
+    disable_level = logging.root.manager.disable
+    root_logger = logging.getLogger()
+    root_state = _logging_state(root_logger)
+    logger = root_logger
+    logger_state = root_state
     try:
-        from tools.service_utils import SimpleGlobalUUIDGenerator
-    except ImportError:
-        SimpleGlobalUUIDGenerator = DummySudo
-    # Reset the pool with config connections as limit
-    sql_db._Pool = sql_db.ConnectionPool(int(tools.config['db_maxconn']))
-    osv_ = osv.osv.osv_pool()
-    db, pool = pooler.get_db_and_pool(dbname)
-    logging.disable(0)
-    if not pool._ready and not AsyncMode.is_async():
-        logger = logging.getLogger(__name__)
-    else:
-        logger = logging.getLogger()
-    logger.handlers = []
-    log_level = tools.config['log_level']
-    worker_log_level = os.getenv('LOG', False)
-    if worker_log_level:
-        log_level = getattr(logging, worker_log_level, 'INFO')
-    logging.basicConfig(level=log_level)
-    if not pool._ready and not AsyncMode.is_async():
-        logger.warning('Skipping running sync task because pool is not ready')
-        return
-    if _context_stack.top is None:
-        _context_stack.push({})
-    context = 'sudo' in kw and Sudo(**kw.pop('sudo')) or DummySudo()
-    with context:
-        with SimpleGlobalUUIDGenerator() as _uuid:
-            _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-            tracker_kwargs = _webservice_tracker_kwargs(
-                conf_attrs, _uuid=_uuid, uid=uid, obj=obj,
-                method=method, db=db,
-            )
-            with WebServiceTracker(**tracker_kwargs):
-                task_pushed = False
-                if 'current_task_id' in kw:
-                    task_id = kw.pop('current_task_id')
-                    task = Task(task_id)
-                    TASK_CONTEXT_STACK.push(task)
-                    task_pushed = True
-                with SentryCatch(_uuid=_uuid, obj=obj, method=method):
-                    res = osv_.execute(dbname, uid, obj, method, *args, **kw)
-                if task_pushed:
-                    TASK_CONTEXT_STACK.pop()
+        if not os.getenv('VERBOSE', False):
+            logging.disable(logging.CRITICAL)
+        import netsvc
+        import tools
+        for attr, value in conf_attrs.items():
+            tools.config[attr] = value
+        _ad = os.path.abspath(os.path.join(
+            tools.config['root_path'], 'addons'
+        ))
+        ad = os.path.abspath(tools.config['addons_path'])
 
-    _context_stack.pop()
-    logger.info('Time elapsed: %s' % (datetime.now() - start))
-    sql_db.close_db(dbname)
-    return res
+        _ensure_sys_path(_ad)
+        if ad != _ad:
+            _ensure_sys_path(ad)
+        import pooler
+        from tools import config
+        import osv
+        import workflow
+        import report
+        import service
+        import sql_db
+        from ctx import _context_stack
+        from service.security import Sudo
+        from service.taskmanager import Task, TASK_CONTEXT_STACK
+        from tools.service_utils import WebServiceTracker
+        try:
+            from tools.service_utils import SimpleGlobalUUIDGenerator
+        except ImportError:
+            SimpleGlobalUUIDGenerator = DummySudo
+
+        # The worker bootstrap owns the connection pool. Replacing it for
+        # every job leaks the previous pool in a persistent process.
+        if getattr(sql_db, '_Pool', None) is None:
+            sql_db._Pool = sql_db.ConnectionPool(
+                int(tools.config['db_maxconn'])
+            )
+        osv_ = osv.osv.osv_pool()
+        db, pool = pooler.get_db_and_pool(dbname)
+        logging.disable(logging.NOTSET)
+        if not pool._ready and not AsyncMode.is_async():
+            logger = logging.getLogger(__name__)
+            logger_state = _logging_state(logger)
+        log_level = tools.config['log_level']
+        worker_log_level = os.getenv('LOG', False)
+        if worker_log_level:
+            log_level = getattr(logging, worker_log_level, logging.INFO)
+        root_logger.setLevel(log_level)
+        if not pool._ready and not AsyncMode.is_async():
+            logger.warning('Skipping running sync task because pool is not ready')
+            return
+
+        job_context = (_context_stack.top or {}).copy()
+        context = 'sudo' in kw and Sudo(**kw.pop('sudo')) or DummySudo()
+        with _stack_frame(_context_stack, job_context):
+            with context:
+                with SimpleGlobalUUIDGenerator() as _uuid:
+                    _uuid = (
+                        _uuid if not isinstance(_uuid, DummySudo) else None
+                    )
+                    tracker_kwargs = _webservice_tracker_kwargs(
+                        conf_attrs, _uuid=_uuid, uid=uid, obj=obj,
+                        method=method, db=db,
+                    )
+                    with WebServiceTracker(**tracker_kwargs):
+                        task_id = kw.pop('current_task_id', None)
+                        with _preserve_stack(TASK_CONTEXT_STACK):
+                            task_context = (
+                                _stack_frame(
+                                    TASK_CONTEXT_STACK, Task(task_id)
+                                )
+                                if task_id is not None else DummySudo()
+                            )
+                            with task_context:
+                                with SentryCatch(
+                                        _uuid=_uuid, obj=obj, method=method):
+                                    return osv_.execute(
+                                        dbname, uid, obj, method, *args, **kw
+                                    )
+    finally:
+        logging.disable(logging.NOTSET)
+        try:
+            logging.disable(logging.NOTSET)
+            logger.info('Time elapsed: %s' % (datetime.now() - start))
+        finally:
+            if logger is not root_logger:
+                _restore_logging_state(logger, logger_state)
+            _restore_logging_state(root_logger, root_state)
+            logging.disable(disable_level)
 
 
 def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
