@@ -3,3 +3,6 @@ from .test_autoworkers import *
 from .test_oorq import *
 from .test_taskmanager import *
 from .test_process_jobs import *
+from .test_tracker_config import *
+from .test_worker_logging import *
+
