@@ -228,6 +228,91 @@ def test_two_successful_jobs_do_not_share_stack_state(monkeypatch):
     assert not hasattr(current_thread(), 'dbname')
 
 
+def test_report_between_execute_jobs_preserves_pool_and_caches(monkeypatch):
+    context_stack = LocalStack()
+    task_stack = LocalStack()
+    closed_databases = []
+    cleaned_databases = []
+    pools = []
+
+    def succeed(*args, **kwargs):
+        pools.append(sys.modules['sql_db']._Pool)
+        return len(pools)
+
+    install_erp_modules(
+        monkeypatch, succeed, context_stack, task_stack, closed_databases,
+        cleaned_databases,
+    )
+
+    class Cursor(object):
+        def close(self):
+            pass
+
+    class Connection(object):
+        def cursor(self, **kwargs):
+            return Cursor()
+
+    class ReportService(object):
+        _service = type('Service', (object,), {'model': 'model'})()
+
+        def create(self, cursor, uid, ids, datas, context):
+            pools.append(sys.modules['sql_db']._Pool)
+            return b'report', 'pdf'
+
+    class Job(object):
+        meta = {}
+
+        def save(self):
+            pass
+
+    sys.modules['sql_db'].db_connect = lambda dbname: Connection()
+    sys.modules['netsvc'].LocalService = lambda name: ReportService()
+    monkeypatch.setattr(tasks, 'get_current_job', lambda: Job())
+    monkeypatch.setattr(tasks.AsyncMode, 'is_async', lambda: True)
+
+    assert tasks.execute({}, 'database', 1, 'model', 'method') == 1
+    assert tasks.report(
+        {}, 'database', 1, 'sample', [1], datas={}, context={},
+    ) == (b'report', 'pdf')
+    assert tasks.execute({}, 'database', 1, 'model', 'method') == 3
+
+    assert closed_databases == []
+    assert cleaned_databases == []
+    assert pools[0] is pools[1] is pools[2]
+
+
+def test_update_jobs_group_preserves_pool_and_caches(monkeypatch):
+    context_stack = LocalStack()
+    task_stack = LocalStack()
+    closed_databases = []
+    cleaned_databases = []
+    install_erp_modules(
+        monkeypatch, lambda *args, **kwargs: None,
+        context_stack, task_stack, closed_databases, cleaned_databases,
+    )
+
+    class JobsPool(object):
+        def __init__(self, *args):
+            pass
+
+        def add_job(self, job):
+            pass
+
+        def join(self):
+            pass
+
+    monkeypatch.setattr(tasks, 'StoredJobsPool', JobsPool)
+    monkeypatch.setattr(tasks, 'setup_redis_connection', lambda: object())
+    monkeypatch.setattr(
+        tasks.Job, 'fetch', staticmethod(lambda job_id: object()),
+    )
+
+    tasks.update_jobs_group({}, 'database', 1, 'group', False, ['job'])
+
+    assert closed_databases == []
+    assert cleaned_databases == []
+
+
 def test_erp_paths_are_idempotent(monkeypatch):
     original = list(sys.path)
     try:
@@ -237,3 +322,58 @@ def test_erp_paths_are_idempotent(monkeypatch):
         assert sys.path.count('/erp/addons') == 1
     finally:
         sys.path[:] = original
+
+
+def test_isolated_execute_stops_after_job_timeout(monkeypatch):
+    context_stack = LocalStack()
+    task_stack = LocalStack()
+    executed_ids = []
+
+    def timeout_first_id(*args, **kwargs):
+        executed_ids.extend(args[-1])
+        raise tasks.JobTimeoutException('deadline')
+
+    install_erp_modules(
+        monkeypatch, timeout_first_id, context_stack, task_stack, [],
+    )
+
+    with pytest.raises(tasks.JobTimeoutException, match='deadline'):
+        tasks.isolated_execute(
+            {}, 'database', 1, 'model', 'method', [1, 2],
+        )
+
+    assert executed_ids == [1]
+
+
+def test_other_entrypoints_restore_process_state(monkeypatch):
+    context_stack = LocalStack()
+    task_stack = LocalStack()
+    caller_context = object()
+    caller_task = object()
+    context_stack.push(caller_context)
+    task_stack.push(caller_task)
+    install_erp_modules(
+        monkeypatch, lambda *args, **kwargs: None,
+        context_stack, task_stack, [],
+    )
+    root_logger = logging.getLogger()
+    original_handlers = list(root_logger.handlers)
+    original_disable = logging.root.manager.disable
+
+    @tasks._restore_entrypoint_state
+    def leaking_entrypoint(conf_attrs, dbname):
+        context_stack.push(object())
+        task_stack.push(object())
+        root_logger.handlers = []
+        logging.disable(logging.ERROR)
+        current_thread().dbname = dbname
+        raise RuntimeError('entrypoint failure')
+
+    with pytest.raises(RuntimeError, match='entrypoint failure'):
+        leaking_entrypoint({}, 'database')
+
+    assert context_stack.pop() is caller_context
+    assert task_stack.pop() is caller_task
+    assert root_logger.handlers == original_handlers
+    assert logging.root.manager.disable == original_disable
+    assert not hasattr(current_thread(), 'dbname')

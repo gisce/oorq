@@ -3,8 +3,10 @@ from rq.worker import SimpleWorker
 import sys
 
 from oorq.worker import (
-    ERPWorkerMixin, NoPersistentWorker, PersistentWorker, Worker, WorkerJob,
+    DEFAULT_PERSISTENT_MAX_JOBS, ERPWorkerMixin, NoPersistentWorker,
+    PersistentWorker, Worker, WorkerJob, _pubsub_subscriptions,
 )
+from oorq.process_state import request_recycle
 
 
 def function(method):
@@ -21,7 +23,6 @@ def test_default_worker_keeps_fork_based_rq_worker():
 def test_persistent_worker_uses_simple_worker_execution():
     assert issubclass(PersistentWorker, ERPWorkerMixin)
     assert issubclass(PersistentWorker, SimpleWorker)
-    assert function(PersistentWorker.execute_job) is function(SimpleWorker.execute_job)
     assert PersistentWorker.job_class is WorkerJob
 
 
@@ -29,12 +30,29 @@ def worker_with_config(value=None, present=True):
     worker = Worker.__new__(Worker)
     worker.select_worker_from_config = True
     worker.persistent = False
-    worker.log = type('Log', (), {'warning': lambda *args: None})()
+    worker.log = type('Log', (), {
+        'warning': lambda *args: None,
+        'info': lambda *args: None,
+    })()
     options = {}
     if present:
         options['oorq_persistent_worker'] = value
     config = type('Config', (), {'options': options})()
     worker.persistent = worker._persistent_worker_enabled(config)
+    worker._persistent_job_ordinal = 0
+    worker._persistent_exit_reason = None
+    return worker
+
+
+def persistent_worker_state():
+    worker = PersistentWorker.__new__(PersistentWorker)
+    worker.persistent = True
+    worker._stop_requested = False
+    worker._persistent_exit_reason = None
+    worker.log = type('Log', (), {
+        'warning': lambda *args: None,
+        'info': lambda *args: None,
+    })()
     return worker
 
 
@@ -88,6 +106,84 @@ def test_explicit_worker_classes_ignore_automatic_selection():
 
     assert non_persistent._persistent_worker_enabled(config) is False
     assert persistent._persistent_worker_enabled(config) is True
+
+
+def test_persistent_worker_defaults_to_conservative_recycle_limit():
+    worker = persistent_worker_state()
+    config = type('Config', (), {'options': {}})()
+
+    assert worker._configured_max_jobs(config) == DEFAULT_PERSISTENT_MAX_JOBS
+
+
+def test_persistent_worker_recycle_limit_can_be_changed_or_disabled():
+    worker = persistent_worker_state()
+
+    configured = type('Config', (), {
+        'options': {'oorq_persistent_max_jobs': '250'},
+    })()
+    disabled = type('Config', (), {
+        'options': {'oorq_persistent_max_jobs': '0'},
+    })()
+
+    assert worker._configured_max_jobs(configured) == 250
+    assert worker._configured_max_jobs(disabled) is None
+
+
+def test_persistent_worker_applies_limit_without_overriding_cli(monkeypatch):
+    calls = []
+    worker = persistent_worker_state()
+    worker.persistent_max_jobs = 100
+    monkeypatch.setattr(
+        SimpleWorker, 'work',
+        lambda self, *args, **kwargs: calls.append(kwargs['max_jobs']),
+    )
+
+    worker.work()
+    worker.work(max_jobs=7)
+
+    assert calls == [100, 7]
+
+
+def test_failed_job_marks_persistent_worker_for_orderly_recycle(monkeypatch):
+    worker = persistent_worker_state()
+    monkeypatch.setattr(SimpleWorker, 'perform_job', lambda *args: False)
+
+    assert worker.perform_job('job', 'queue') is False
+    assert worker._stop_requested is True
+    assert worker._persistent_exit_reason == 'job_failed'
+
+
+def test_successful_job_keeps_persistent_worker_available(monkeypatch):
+    worker = persistent_worker_state()
+    monkeypatch.setattr(SimpleWorker, 'perform_job', lambda *args: True)
+
+    assert worker.perform_job('job', 'queue') is True
+    assert worker._stop_requested is False
+    assert worker._persistent_exit_reason is None
+
+
+def test_task_can_request_recycle_after_a_handled_cleanup_risk(monkeypatch):
+    worker = persistent_worker_state()
+    monkeypatch.setattr(SimpleWorker, 'perform_job', lambda *args: True)
+    request_recycle('isolated_execute_failed')
+
+    assert worker.perform_job('job', 'queue') is True
+    assert worker._stop_requested is True
+    assert worker._persistent_exit_reason == 'isolated_execute_failed'
+
+
+def test_pubsub_subscriptions_are_database_scoped_and_deduplicated():
+    config = type('Config', (), {
+        'pubsub_subscriptions': ['database_a.all'],
+        '__getitem__': lambda self, key: {'db_name': 'database_a'}[key],
+    })()
+    queue = type('Queue', (), {'name': 'billing'})()
+
+    assert _pubsub_subscriptions(config, [queue, queue]) == [
+        'database_a.all',
+        'database_a.worker',
+        'database_a.worker.billing',
+    ]
 
 
 def test_worker_bootstraps_once_before_selecting_strategy(monkeypatch):

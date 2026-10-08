@@ -1,5 +1,8 @@
 from copy import copy
+from datetime import datetime
 from logging import Filter
+import os
+import resource
 
 from rq import Worker as RQWorker
 from rq.worker import SimpleWorker as RQSimpleWorker
@@ -17,6 +20,8 @@ CONFIG_TASKS = (
     'oorq.tasks.report', 'oorq.tasks.update_jobs_group',
 )
 PERSISTENT_WORKER_CONFIG = 'oorq_persistent_worker'
+PERSISTENT_MAX_JOBS_CONFIG = 'oorq_persistent_max_jobs'
+DEFAULT_PERSISTENT_MAX_JOBS = 100
 TRUE_CONFIG_VALUES = (True, 1, '1', 'true', 'yes', 'on')
 FALSE_CONFIG_VALUES = (False, 0, None, '', '0', 'false', 'no', 'off')
 
@@ -25,6 +30,20 @@ def _call_unbound(method, instance, *args):
     """Call an RQ implementation with a compatible Python 2/3 binding."""
     function = getattr(method, 'im_func', method)
     return function(instance, *args)
+
+
+def _pubsub_subscriptions(config, queues):
+    dbname = config['db_name']
+    subscriptions = list(config.pubsub_subscriptions)
+    subscriptions.append('{}.worker'.format(dbname))
+    subscriptions.extend(
+        '{}.worker.{}'.format(dbname, queue.name) for queue in queues
+    )
+    unique = []
+    for subscription in subscriptions:
+        if subscription not in unique:
+            unique.append(subscription)
+    return unique
 
 
 class WorkerLogFilter(Filter):
@@ -67,6 +86,30 @@ class ERPWorkerMixin(object):
     persistent = False
     select_worker_from_config = False
 
+    def _configured_max_jobs(self, config):
+        value = config.options.get(
+            PERSISTENT_MAX_JOBS_CONFIG, DEFAULT_PERSISTENT_MAX_JOBS
+        )
+        if value in (None, False, ''):
+            return None
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            self.log.warning(
+                'Invalid %s value %r; using %d',
+                PERSISTENT_MAX_JOBS_CONFIG, value,
+                DEFAULT_PERSISTENT_MAX_JOBS,
+            )
+            return DEFAULT_PERSISTENT_MAX_JOBS
+        if value < 0:
+            self.log.warning(
+                'Invalid %s value %r; using %d',
+                PERSISTENT_MAX_JOBS_CONFIG, value,
+                DEFAULT_PERSISTENT_MAX_JOBS,
+            )
+            return DEFAULT_PERSISTENT_MAX_JOBS
+        return value or None
+
     def __init__(self, *args, **kwargs):
         super(ERPWorkerMixin, self).__init__(*args, **kwargs)
         # The RQ CLI explicitly passes its default Job class.
@@ -78,6 +121,9 @@ class ERPWorkerMixin(object):
         import tools
         tools.config.parse()
         self.persistent = self._persistent_worker_enabled(tools.config)
+        self.persistent_max_jobs = self._configured_max_jobs(tools.config)
+        self._persistent_job_ordinal = 0
+        self._persistent_exit_reason = None
         effective_worker = (
             'PersistentWorker' if self.persistent else 'NoPersistentWorker'
         )
@@ -102,14 +148,7 @@ class ERPWorkerMixin(object):
         try:
             from service.pubsub import PubSub
             if hasattr(tools.config, 'pubsub_subscriptions'):
-                subscriptions = (
-                    config.pubsub_subscriptions +
-                    ['{}.worker'.format(config['db_name'])] +
-                    [
-                        '{}.worker.{}'.format(config['db_name'], _q.name)
-                        for _q in self.queues
-                    ]
-                )
+                subscriptions = _pubsub_subscriptions(config, self.queues)
                 PubSub.connect(subscriptions)
             else:
                 PubSub.connect('{}.worker'.format(config['db_name']))
@@ -118,6 +157,58 @@ class ERPWorkerMixin(object):
 
         except ImportError:
             pass
+
+    def work(self, *args, **kwargs):
+        """Apply the configured recycle limit unless the CLI overrides it."""
+        if self.persistent:
+            args = list(args)
+            if len(args) >= 5:
+                if args[4] is None:
+                    args[4] = self.persistent_max_jobs
+            elif kwargs.get('max_jobs') is None:
+                kwargs['max_jobs'] = self.persistent_max_jobs
+            args = tuple(args)
+            if self.persistent_max_jobs:
+                self.log.info(
+                    'Persistent worker recycle limit: %d jobs',
+                    kwargs.get('max_jobs', args[4] if len(args) >= 5 else
+                               self.persistent_max_jobs),
+                )
+        return super(ERPWorkerMixin, self).work(*args, **kwargs)
+
+    def perform_job(self, *args, **kwargs):
+        succeeded = super(ERPWorkerMixin, self).perform_job(*args, **kwargs)
+        from .process_state import consume_recycle_reason
+        recycle_reason = consume_recycle_reason()
+        if self.persistent and (succeeded is False or recycle_reason):
+            # RQ handles and records the failure before returning False.  Do
+            # not reserve another job in a process that may have timed out or
+            # whose application cleanup may have failed.
+            self._persistent_exit_reason = recycle_reason or 'job_failed'
+            self._stop_requested = True
+            self.log.warning(
+                'Persistent worker marked for recycle: %s',
+                self._persistent_exit_reason,
+            )
+        return succeeded
+
+    def _execute_persistent_job(self, implementation, job, queue):
+        self._persistent_job_ordinal += 1
+        ordinal = self._persistent_job_ordinal
+        started = datetime.now()
+        rss_before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        try:
+            return _call_unbound(implementation, self, job, queue)
+        finally:
+            rss_after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            self.log.info(
+                'oorq persistent job pid=%d job_id=%s ordinal=%d '
+                'duration_seconds=%.6f rss_before_kb=%d rss_after_kb=%d '
+                'recycle_reason=%s',
+                os.getpid(), getattr(job, 'id', '<unknown>'), ordinal,
+                (datetime.now() - started).total_seconds(), rss_before,
+                rss_after, self._persistent_exit_reason or 'none',
+            )
 
     def _persistent_worker_enabled(self, config):
         if not self.select_worker_from_config:
@@ -156,6 +247,11 @@ class PersistentWorker(ERPWorkerMixin, RQSimpleWorker):
 
     persistent = True
 
+    def execute_job(self, job, queue):
+        return self._execute_persistent_job(
+            RQSimpleWorker.execute_job, job, queue
+        )
+
 
 class Worker(NoPersistentWorker):
     """Stable CLI entry point selecting its execution strategy after bootstrap.
@@ -169,8 +265,8 @@ class Worker(NoPersistentWorker):
 
     def execute_job(self, job, queue):
         if self.persistent:
-            return _call_unbound(
-                RQSimpleWorker.execute_job, self, job, queue
+            return self._execute_persistent_job(
+                RQSimpleWorker.execute_job, job, queue
             )
         return _call_unbound(
             NoPersistentWorker.execute_job, self, job, queue

@@ -6,14 +6,17 @@ import sys
 import traceback
 from contextlib import contextmanager
 from datetime import datetime
+from functools import wraps
 from math import ceil
 from threading import current_thread
 
 from rq import get_current_job
 from rq.job import Job
+from rq.timeouts import JobTimeoutException
 from .exceptions import *
 from .oorq import StoredJobsPool, setup_redis_connection, AsyncMode
 from .utils import get_failed_queue
+from .process_state import request_recycle
 
 
 class DummySudo(object):
@@ -97,6 +100,50 @@ def _logging_state(logger):
 def _restore_logging_state(logger, state):
     logger.level, handlers, logger.propagate, logger.disabled = state
     logger.handlers = handlers
+
+
+def _restore_entrypoint_state(function):
+    """Restore process globals around entry points used by persistent RQ."""
+    @wraps(function)
+    def wrapped(conf_attrs, dbname, *args, **kwargs):
+        import logging
+        thread = current_thread()
+        missing = object()
+        previous_dbname = getattr(thread, 'dbname', missing)
+        disable_level = logging.root.manager.disable
+        root_logger = logging.getLogger()
+        root_state = _logging_state(root_logger)
+        context_stack = None
+        task_stack = None
+        context_frames = None
+        task_frames = None
+        try:
+            try:
+                from ctx import _context_stack
+                context_stack = _context_stack
+                context_frames = _stack_snapshot(context_stack)
+            except ImportError:
+                pass
+            try:
+                from service.taskmanager import TASK_CONTEXT_STACK
+                task_stack = TASK_CONTEXT_STACK
+                task_frames = _stack_snapshot(task_stack)
+            except ImportError:
+                pass
+            return function(conf_attrs, dbname, *args, **kwargs)
+        finally:
+            if context_stack is not None:
+                _restore_stack(context_stack, context_frames)
+            if task_stack is not None:
+                _restore_stack(task_stack, task_frames)
+            if previous_dbname is missing:
+                if hasattr(thread, 'dbname'):
+                    delattr(thread, 'dbname')
+            else:
+                thread.dbname = previous_dbname
+            _restore_logging_state(root_logger, root_state)
+            logging.disable(disable_level)
+    return wrapped
 
 
 def make_chunks(ids, n_chunks=None, size=None):
@@ -243,6 +290,7 @@ def execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
             logging.disable(disable_level)
 
 
+@_restore_entrypoint_state
 def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     if not isinstance(args[0], (tuple, list)):
         raise OORQNotIds
@@ -283,33 +331,46 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     # Ensure args is a list to modify
     args = list(args)
     ids = args[0]
-    context = 'sudo' in kw and Sudo(**kw.pop('sudo')) or DummySudo()
+    sudo = kw.pop('sudo', None)
+    task_id = kw.pop('current_task_id', None)
+    from ctx import _context_stack
     for exe_id in ids:
         try:
             logger.info('Executing id %s' % exe_id)
             args[0] = [exe_id]
-            with context:
-                with SimpleGlobalUUIDGenerator() as _uuid:
-                    _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-                    tracker_kwargs = _webservice_tracker_kwargs(
-                        conf_attrs, _uuid=_uuid, uid=uid, obj=obj,
-                        method=method,
-                    )
-                    with WebServiceTracker(**tracker_kwargs):
-                        task_pushed = False
-                        if 'current_task_id' in kw:
-                            task_id = kw.pop('current_task_id')
-                            task = Task(task_id)
-                            TASK_CONTEXT_STACK.push(task)
-                            task_pushed = True
-                        with SentryCatch(_uuid=_uuid, obj=obj, method=method):
-                            res = osv_.execute(dbname, uid, obj, method, *args, **kw)
-                        if task_pushed:
-                            TASK_CONTEXT_STACK.pop()
+            context = Sudo(**sudo) if sudo is not None else DummySudo()
+            job_context = (_context_stack.top or {}).copy()
+            with _stack_frame(_context_stack, job_context):
+                with context:
+                    with SimpleGlobalUUIDGenerator() as _uuid:
+                        _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
+                        tracker_kwargs = _webservice_tracker_kwargs(
+                            conf_attrs, _uuid=_uuid, uid=uid, obj=obj,
+                            method=method,
+                        )
+                        with WebServiceTracker(**tracker_kwargs):
+                            with _preserve_stack(TASK_CONTEXT_STACK):
+                                task_context = (
+                                    _stack_frame(
+                                        TASK_CONTEXT_STACK, Task(task_id)
+                                    )
+                                    if task_id is not None else DummySudo()
+                                )
+                                with task_context:
+                                    with SentryCatch(
+                                            _uuid=_uuid, obj=obj,
+                                            method=method):
+                                        res = osv_.execute(
+                                            dbname, uid, obj, method,
+                                            *args, **kw
+                                        )
             all_res.append(res)
+        except JobTimeoutException:
+            raise
         except:
             logger.error('Executing id %s failed' % exe_id)
             failed_ids.append(exe_id)
+            request_recycle('isolated_execute_failed')
     if failed_ids:
         # Create a new job and enqueue to failed queue
         fq = get_failed_queue()
@@ -326,6 +387,7 @@ def isolated_execute(conf_attrs, dbname, uid, obj, method, *args, **kw):
     return all_res
 
 
+@_restore_entrypoint_state
 def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     job = get_current_job()
     start = datetime.now()
@@ -357,29 +419,36 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     if worker_log_level:
         log_level = getattr(logging, worker_log_level, 'INFO')
     logging.basicConfig(level=log_level)
-    sql_db.close_db(dbname)
     conn = sql_db.db_connect(dbname)
     cursor = conn.cursor(readonly=True, isolation_level='repeatable_read')
-    _obj_name = obj
-    obj = netsvc.LocalService('report.'+obj)
-    if 'model' not in datas:
-        datas['model'] = getattr(obj._service, 'table', False) or getattr(obj._service, 'model', False)
-    with SimpleGlobalUUIDGenerator() as _uuid:
-        _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
-        tracker_kwargs = _webservice_tracker_kwargs(
-            conf_attrs, _uuid=_uuid, uid=uid, obj=_obj_name,
-            method='report', db=conn,
-        )
-        with WebServiceTracker(**tracker_kwargs) as wst:
-            with SentryCatch(_uuid=_uuid, obj=_obj_name, method='report'):
-                result, format = obj.create(cursor, uid, ids, datas, context)
-    job.meta['format'] = format
-    job.save()
-    cursor.close()
-    sql_db.close_db(dbname)
-    return result, format
+    try:
+        _obj_name = obj
+        obj = netsvc.LocalService('report.'+obj)
+        if 'model' not in datas:
+            datas['model'] = (
+                getattr(obj._service, 'table', False) or
+                getattr(obj._service, 'model', False)
+            )
+        with SimpleGlobalUUIDGenerator() as _uuid:
+            _uuid = _uuid if not isinstance(_uuid, DummySudo) else None
+            tracker_kwargs = _webservice_tracker_kwargs(
+                conf_attrs, _uuid=_uuid, uid=uid, obj=_obj_name,
+                method='report', db=conn,
+            )
+            with WebServiceTracker(**tracker_kwargs):
+                with SentryCatch(
+                        _uuid=_uuid, obj=_obj_name, method='report'):
+                    result, format = obj.create(
+                        cursor, uid, ids, datas, context
+                    )
+        job.meta['format'] = format
+        job.save()
+        return result, format
+    finally:
+        cursor.close()
 
 
+@_restore_entrypoint_state
 def update_jobs_group(conf_attrs, dbname, uid, name, internal, jobs_ids):
     start = datetime.now()
     import logging
@@ -392,9 +461,9 @@ def update_jobs_group(conf_attrs, dbname, uid, name, internal, jobs_ids):
     _ad = os.path.abspath(os.path.join(tools.config['root_path'], 'addons'))
     ad = os.path.abspath(tools.config['addons_path'])
 
-    sys.path.insert(1, _ad)
+    _ensure_sys_path(_ad)
     if ad != _ad:
-        sys.path.insert(1, ad)
+        _ensure_sys_path(ad)
     import pooler
     from tools import config
     import osv
@@ -402,8 +471,8 @@ def update_jobs_group(conf_attrs, dbname, uid, name, internal, jobs_ids):
     import report
     import service
     import sql_db
-    # Reset the pool with config connections as limit
-    sql_db._Pool = sql_db.ConnectionPool(int(tools.config['db_maxconn']))
+    if getattr(sql_db, '_Pool', None) is None:
+        sql_db._Pool = sql_db.ConnectionPool(int(tools.config['db_maxconn']))
     jobs_pool = StoredJobsPool(dbname, uid, name, internal)
     redis_conn = setup_redis_connection()
     for job_id in jobs_ids:
@@ -418,4 +487,3 @@ def update_jobs_group(conf_attrs, dbname, uid, name, internal, jobs_ids):
         log_level = getattr(logging, worker_log_level, 'INFO')
     logging.basicConfig(level=log_level)
     logger.info('Time elapsed: %s' % (datetime.now() - start))
-    sql_db.close_db(dbname)
