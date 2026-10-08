@@ -1,5 +1,6 @@
 from rq import Worker as RQWorker
 from rq.worker import SimpleWorker
+from redis.exceptions import ConnectionError as RedisConnectionError
 import sys
 
 from oorq.worker import (
@@ -177,6 +178,74 @@ def test_non_persistent_worker_does_not_stop_erp_services_after_rq_work(
 
     assert worker.work() is True
     assert calls == ['rq']
+
+
+def test_legacy_worker_retries_birth_until_redis_recovers(monkeypatch):
+    worker = worker_with_config(False)
+    calls = []
+
+    def register_birth(instance):
+        calls.append('birth')
+        if len(calls) == 1:
+            raise RedisConnectionError('redis unavailable')
+
+    monkeypatch.setattr('oorq.worker.LEGACY_RQ', True)
+    monkeypatch.setattr(RQWorker, 'register_birth', register_birth)
+    monkeypatch.setattr(
+        worker, '_wait_for_redis',
+        lambda error, wait_time: calls.append(('wait', wait_time)) or 2,
+    )
+
+    worker.register_birth()
+
+    assert calls == ['birth', ('wait', 1), 'birth']
+
+
+def test_legacy_worker_restores_expired_registration_after_reconnect(
+        monkeypatch):
+    worker = worker_with_config(False)
+    calls = []
+    worker.name = 'test'
+    worker.connection = type('Connection', (), {
+        'exists': lambda self, key: calls.append(('exists', key)) or False,
+    })()
+
+    def dequeue(instance, timeout):
+        calls.append('dequeue')
+        if calls.count('dequeue') == 1:
+            raise RedisConnectionError('connection dropped during BLPOP')
+        return 'job', 'queue'
+
+    monkeypatch.setattr('oorq.worker.LEGACY_RQ', True)
+    monkeypatch.setattr(RQWorker, 'dequeue_job_and_maintain_ttl', dequeue)
+    monkeypatch.setattr(
+        worker, '_wait_for_redis',
+        lambda error, wait_time: calls.append(('wait', wait_time)) or 2,
+    )
+    monkeypatch.setattr(worker, 'register_birth', lambda: calls.append('birth'))
+
+    assert worker.dequeue_job_and_maintain_ttl(10) == ('job', 'queue')
+    assert calls == [
+        'dequeue', ('wait', 1), ('exists', 'rq:worker:test'), 'birth',
+        'dequeue',
+    ]
+
+
+def test_legacy_worker_orderly_stop_ignores_unavailable_redis(monkeypatch):
+    worker = worker_with_config(False)
+    worker.name = 'test'
+    warnings = []
+    worker.log.warning = lambda *args: warnings.append(args)
+    monkeypatch.setattr('oorq.worker.LEGACY_RQ', True)
+    monkeypatch.setattr(
+        RQWorker, 'register_death',
+        lambda instance: (_ for _ in ()).throw(
+            RedisConnectionError('redis unavailable')
+        ),
+    )
+
+    assert worker.register_death() is None
+    assert len(warnings) == 1
 
 
 def test_failed_job_marks_persistent_worker_for_orderly_recycle(monkeypatch):

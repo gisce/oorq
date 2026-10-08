@@ -3,10 +3,12 @@ from datetime import datetime
 from logging import Filter
 import os
 import resource
+import time
 
 from rq import Worker as RQWorker
-from rq.worker import SimpleWorker as RQSimpleWorker
+from rq.worker import SimpleWorker as RQSimpleWorker, StopRequested
 from rq.job import Job as RQJob
+from redis.exceptions import ConnectionError as RedisConnectionError
 from six import string_types
 try:
     from rq.exceptions import DeserializationError
@@ -22,6 +24,9 @@ CONFIG_TASKS = (
 PERSISTENT_WORKER_CONFIG = 'oorq_persistent_worker'
 PERSISTENT_MAX_JOBS_CONFIG = 'oorq_persistent_max_jobs'
 DEFAULT_PERSISTENT_MAX_JOBS = 100
+INITIAL_CONNECTION_WAIT_TIME = 1
+MAX_CONNECTION_WAIT_TIME = 60
+LEGACY_RQ = not hasattr(RQWorker, 'bootstrap')
 TRUE_CONFIG_VALUES = (True, 1, '1', 'true', 'yes', 'on')
 FALSE_CONFIG_VALUES = (False, 0, None, '', '0', 'false', 'no', 'off')
 
@@ -85,6 +90,62 @@ class ERPWorkerMixin(object):
     log_filter = WorkerLogFilter()
     persistent = False
     select_worker_from_config = False
+
+    def _wait_for_redis(self, error, wait_time):
+        self.log.error(
+            'Could not connect to Redis instance: %s. Retrying in %d '
+            'seconds...', error, wait_time,
+        )
+        time.sleep(wait_time)
+        return min(wait_time * 2, MAX_CONNECTION_WAIT_TIME)
+
+    def register_birth(self):
+        """Keep legacy RQ workers alive while Redis is unavailable."""
+        if not LEGACY_RQ:
+            return super(ERPWorkerMixin, self).register_birth()
+
+        wait_time = INITIAL_CONNECTION_WAIT_TIME
+        while True:
+            try:
+                return super(ERPWorkerMixin, self).register_birth()
+            except RedisConnectionError as error:
+                wait_time = self._wait_for_redis(error, wait_time)
+
+    def register_death(self):
+        """Do not turn an orderly stop into a crash while Redis is down."""
+        try:
+            return super(ERPWorkerMixin, self).register_death()
+        except RedisConnectionError:
+            if not LEGACY_RQ:
+                raise
+            self.log.warning(
+                'Could not unregister worker %s because Redis is unavailable; '
+                'its registration will expire', self.key,
+            )
+
+    def dequeue_job_and_maintain_ttl(self, *args, **kwargs):
+        """Backport RQ's bounded connection retry to legacy workers.
+
+        Re-register after a long outage because the worker hash and its queue
+        memberships may have expired while Redis was unavailable.
+        """
+        if not LEGACY_RQ:
+            return super(ERPWorkerMixin, self).dequeue_job_and_maintain_ttl(
+                *args, **kwargs
+            )
+
+        wait_time = INITIAL_CONNECTION_WAIT_TIME
+        reconnecting = False
+        while True:
+            try:
+                if reconnecting and not self.connection.exists(self.key):
+                    self.register_birth()
+                return super(
+                    ERPWorkerMixin, self
+                ).dequeue_job_and_maintain_ttl(*args, **kwargs)
+            except RedisConnectionError as error:
+                reconnecting = True
+                wait_time = self._wait_for_redis(error, wait_time)
 
     def _configured_max_jobs(self, config):
         value = config.options.get(
@@ -174,7 +235,14 @@ class ERPWorkerMixin(object):
                     kwargs.get('max_jobs', args[4] if len(args) >= 5 else
                                self.persistent_max_jobs),
                 )
-        worked = super(ERPWorkerMixin, self).work(*args, **kwargs)
+        if LEGACY_RQ:
+            # RQ 1.3 registers the worker before installing signal handlers.
+            # Install them first so startup retry can still be stopped cleanly.
+            self._install_signal_handlers()
+        try:
+            worked = super(ERPWorkerMixin, self).work(*args, **kwargs)
+        except StopRequested:
+            worked = False
         if self.persistent:
             self.log.info('Persistent worker finished; stopping ERP services')
             self._request_erp_shutdown()
