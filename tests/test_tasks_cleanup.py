@@ -237,3 +237,37 @@ def test_erp_paths_are_idempotent(monkeypatch):
         assert sys.path.count('/erp/addons') == 1
     finally:
         sys.path[:] = original
+
+
+def test_other_entrypoints_restore_process_state(monkeypatch):
+    context_stack = LocalStack()
+    task_stack = LocalStack()
+    caller_context = object()
+    caller_task = object()
+    context_stack.push(caller_context)
+    task_stack.push(caller_task)
+    install_erp_modules(
+        monkeypatch, lambda *args, **kwargs: None,
+        context_stack, task_stack, [],
+    )
+    root_logger = logging.getLogger()
+    original_handlers = list(root_logger.handlers)
+    original_disable = logging.root.manager.disable
+
+    @tasks._restore_entrypoint_state
+    def leaking_entrypoint(conf_attrs, dbname):
+        context_stack.push(object())
+        task_stack.push(object())
+        root_logger.handlers = []
+        logging.disable(logging.ERROR)
+        current_thread().dbname = dbname
+        raise RuntimeError('entrypoint failure')
+
+    with pytest.raises(RuntimeError, match='entrypoint failure'):
+        leaking_entrypoint({}, 'database')
+
+    assert context_stack.pop() is caller_context
+    assert task_stack.pop() is caller_task
+    assert root_logger.handlers == original_handlers
+    assert logging.root.manager.disable == original_disable
+    assert not hasattr(current_thread(), 'dbname')
