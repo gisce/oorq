@@ -28,7 +28,9 @@ from service.taskmanager import TaskManager
 current_task = TaskManager.current_task()
 
 
-JobToProcess = namedtuple('JobToProcess', ['job_id', 'queue_name', 'at_front'])
+JobToProcess = namedtuple(
+    'JobToProcess', ['job_id', 'queue_name', 'is_async', 'at_front']
+)
 
 
 class ProcessJobs(object):
@@ -39,7 +41,7 @@ class ProcessJobs(object):
     def add_job(cls, transaction_id, job, queue, at_front=False):
         cls.JOBS_TO_PROCESS.setdefault(transaction_id, [])
         cls.JOBS_TO_PROCESS[transaction_id].append(
-            JobToProcess(job.id, queue.name, at_front)
+            JobToProcess(job.id, queue.name, queue.is_async, at_front)
         )
 
     @staticmethod
@@ -63,7 +65,7 @@ class ProcessJobs(object):
                 del pending_jobs[index]
                 continue
 
-            job_id, queue_name, at_front = pending_job
+            job_id, queue_name, is_async, at_front = pending_job
             try:
                 job = Job.fetch(job_id, connection=redis_conn)
             except NoSuchJobError:
@@ -73,7 +75,7 @@ class ProcessJobs(object):
                 del pending_jobs[index]
                 continue
 
-            queue = Queue(queue_name, connection=redis_conn)
+            queue = Queue(queue_name, connection=redis_conn, is_async=is_async)
             queue.enqueue_job(job, at_front=at_front)
             log('Enqueued job {} to queue {} from commit transaction {}'.format(
                 job.id, queue.name, transaction_id
@@ -86,12 +88,16 @@ class ProcessJobs(object):
     @staticmethod
     def _delete_jobs(jobs):
         redis_conn = setup_redis_connection()
-        for job_id, queue_name, at_front in jobs:
+        for job_id, queue_name, is_async, at_front in jobs:
             try:
                 Job.fetch(job_id, connection=redis_conn).delete()
             except NoSuchJobError:
                 log('Job {} was already deleted before rollback cleanup'.format(
                     job_id
+                ), netsvc.LOG_WARNING)
+            except Exception as error:
+                log('Could not delete job {} during rollback cleanup: {}'.format(
+                    job_id, error
                 ), netsvc.LOG_WARNING)
 
     @staticmethod
@@ -203,7 +209,7 @@ class job(object):
                 job.meta['requeue'] = self.requeue
                 job.save()
                 set_hash_job(job)
-                if self.on_commit and async_mode:
+                if self.on_commit:
                     ProcessJobs.add_job(transaction_id, job, q, self.at_front)
                     log('Created job (id:%s) for queue %s: [%s] pool(%s).%s%s '
                         '(waiting to commit/rollback %s)' % (
