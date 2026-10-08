@@ -228,6 +228,91 @@ def test_two_successful_jobs_do_not_share_stack_state(monkeypatch):
     assert not hasattr(current_thread(), 'dbname')
 
 
+def test_report_between_execute_jobs_preserves_pool_and_caches(monkeypatch):
+    context_stack = LocalStack()
+    task_stack = LocalStack()
+    closed_databases = []
+    cleaned_databases = []
+    pools = []
+
+    def succeed(*args, **kwargs):
+        pools.append(sys.modules['sql_db']._Pool)
+        return len(pools)
+
+    install_erp_modules(
+        monkeypatch, succeed, context_stack, task_stack, closed_databases,
+        cleaned_databases,
+    )
+
+    class Cursor(object):
+        def close(self):
+            pass
+
+    class Connection(object):
+        def cursor(self, **kwargs):
+            return Cursor()
+
+    class ReportService(object):
+        _service = type('Service', (object,), {'model': 'model'})()
+
+        def create(self, cursor, uid, ids, datas, context):
+            pools.append(sys.modules['sql_db']._Pool)
+            return b'report', 'pdf'
+
+    class Job(object):
+        meta = {}
+
+        def save(self):
+            pass
+
+    sys.modules['sql_db'].db_connect = lambda dbname: Connection()
+    sys.modules['netsvc'].LocalService = lambda name: ReportService()
+    monkeypatch.setattr(tasks, 'get_current_job', lambda: Job())
+    monkeypatch.setattr(tasks.AsyncMode, 'is_async', lambda: True)
+
+    assert tasks.execute({}, 'database', 1, 'model', 'method') == 1
+    assert tasks.report(
+        {}, 'database', 1, 'sample', [1], datas={}, context={},
+    ) == (b'report', 'pdf')
+    assert tasks.execute({}, 'database', 1, 'model', 'method') == 3
+
+    assert closed_databases == []
+    assert cleaned_databases == []
+    assert pools[0] is pools[1] is pools[2]
+
+
+def test_update_jobs_group_preserves_pool_and_caches(monkeypatch):
+    context_stack = LocalStack()
+    task_stack = LocalStack()
+    closed_databases = []
+    cleaned_databases = []
+    install_erp_modules(
+        monkeypatch, lambda *args, **kwargs: None,
+        context_stack, task_stack, closed_databases, cleaned_databases,
+    )
+
+    class JobsPool(object):
+        def __init__(self, *args):
+            pass
+
+        def add_job(self, job):
+            pass
+
+        def join(self):
+            pass
+
+    monkeypatch.setattr(tasks, 'StoredJobsPool', JobsPool)
+    monkeypatch.setattr(tasks, 'setup_redis_connection', lambda: object())
+    monkeypatch.setattr(
+        tasks.Job, 'fetch', staticmethod(lambda job_id: object()),
+    )
+
+    tasks.update_jobs_group({}, 'database', 1, 'group', False, ['job'])
+
+    assert closed_databases == []
+    assert cleaned_databases == []
+
+
 def test_erp_paths_are_idempotent(monkeypatch):
     original = list(sys.path)
     try:

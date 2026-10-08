@@ -419,7 +419,6 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
     if worker_log_level:
         log_level = getattr(logging, worker_log_level, 'INFO')
     logging.basicConfig(level=log_level)
-    sql_db.close_db(dbname)
     conn = sql_db.db_connect(dbname)
     cursor = conn.cursor(readonly=True, isolation_level='repeatable_read')
     try:
@@ -447,7 +446,6 @@ def report(conf_attrs, dbname, uid, obj, ids, datas=None, context=None):
         return result, format
     finally:
         cursor.close()
-        sql_db.close_db(dbname)
 
 
 @_restore_entrypoint_state
@@ -489,4 +487,3 @@ def update_jobs_group(conf_attrs, dbname, uid, name, internal, jobs_ids):
         log_level = getattr(logging, worker_log_level, 'INFO')
     logging.basicConfig(level=log_level)
     logger.info('Time elapsed: %s' % (datetime.now() - start))
-    sql_db.close_db(dbname)
