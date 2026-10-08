@@ -1,5 +1,6 @@
 import logging
 import sys
+from threading import current_thread
 from types import ModuleType
 
 import pytest
@@ -31,12 +32,19 @@ def module(name, **attributes):
 
 
 def install_erp_modules(monkeypatch, execute, context_stack, task_stack,
-                        closed_databases):
+                        closed_databases, cleaned_databases=None):
+    if cleaned_databases is None:
+        cleaned_databases = []
     config = Config(
         root_path='/erp', addons_path='/erp/custom-addons',
         db_maxconn='4', log_level=logging.WARNING,
     )
-    tools = module('tools', config=config)
+    tools = module(
+        'tools', config=config,
+        cache=type('Cache', (object,), {
+            'clean_caches_for_db': staticmethod(cleaned_databases.append),
+        }),
+    )
     pool = type('Pool', (object,), {'_ready': True})()
     pooler = module(
         'pooler',
@@ -146,6 +154,9 @@ def test_execute_restores_process_state_after_business_error(monkeypatch):
     context_stack.push(caller_context)
     task_stack.push(caller_task)
     closed_databases = []
+    cleaned_databases = []
+    thread = current_thread()
+    monkeypatch.setattr(thread, 'dbname', 'caller_database', raising=False)
 
     def fail(*args, **kwargs):
         context_stack.push({'leaked': True})
@@ -156,6 +167,7 @@ def test_execute_restores_process_state_after_business_error(monkeypatch):
 
     install_erp_modules(
         monkeypatch, fail, context_stack, task_stack, closed_databases,
+        cleaned_databases,
     )
     monkeypatch.setattr(tasks.AsyncMode, 'is_async', lambda: True)
     original_handlers = list(logging.getLogger().handlers)
@@ -170,6 +182,8 @@ def test_execute_restores_process_state_after_business_error(monkeypatch):
     assert context_stack.top is caller_context
     assert task_stack.top is caller_task
     assert closed_databases == []
+    assert cleaned_databases == ['database']
+    assert thread.dbname == 'caller_database'
     assert logging.getLogger().handlers == original_handlers
     assert logging.root.manager.disable == original_disable
 
@@ -178,9 +192,13 @@ def test_two_successful_jobs_do_not_share_stack_state(monkeypatch):
     context_stack = LocalStack()
     task_stack = LocalStack()
     closed_databases = []
+    cleaned_databases = []
     observed_contexts = []
+    pools = []
 
     def succeed(*args, **kwargs):
+        pools.append(sys.modules['sql_db']._Pool)
+        current_thread().dbname = 'database'
         observed_contexts.append(dict(context_stack.top))
         context_stack.top['job_only'] = True
         context_stack.push(context_stack.top)
@@ -190,6 +208,7 @@ def test_two_successful_jobs_do_not_share_stack_state(monkeypatch):
 
     install_erp_modules(
         monkeypatch, succeed, context_stack, task_stack, closed_databases,
+        cleaned_databases,
     )
     monkeypatch.setattr(tasks.AsyncMode, 'is_async', lambda: True)
 
@@ -204,6 +223,9 @@ def test_two_successful_jobs_do_not_share_stack_state(monkeypatch):
     assert context_stack.top is None
     assert task_stack.top is None
     assert closed_databases == []
+    assert cleaned_databases == []
+    assert pools[0] is pools[1]
+    assert not hasattr(current_thread(), 'dbname')
 
 
 def test_erp_paths_are_idempotent(monkeypatch):
