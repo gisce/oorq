@@ -1,7 +1,9 @@
 from rq import Worker as RQWorker
 from rq.worker import SimpleWorker
 from redis.exceptions import ConnectionError as RedisConnectionError
+import os
 import sys
+import types
 
 from oorq.worker import (
     DEFAULT_PERSISTENT_MAX_JOBS, ERPWorkerMixin, NoPersistentWorker,
@@ -19,6 +21,39 @@ def test_default_worker_keeps_fork_based_rq_worker():
     assert issubclass(Worker, NoPersistentWorker)
     assert issubclass(Worker, RQWorker)
     assert Worker.job_class is WorkerJob
+
+
+def test_forked_worker_replaces_inherited_sql_pool(monkeypatch):
+    inherited_pool = object()
+    sql_db = types.ModuleType('sql_db')
+    sql_db._Pool = inherited_pool
+    sql_db.ConnectionPool = lambda maxconn: ('child-pool', maxconn)
+    tools = types.ModuleType('tools')
+    tools.config = {'db_maxconn': '17'}
+    monkeypatch.setitem(sys.modules, 'sql_db', sql_db)
+    monkeypatch.setitem(sys.modules, 'tools', tools)
+    reader, writer = os.pipe()
+
+    child_pid = os.fork()
+    if child_pid == 0:
+        try:
+            worker = NoPersistentWorker.__new__(NoPersistentWorker)
+            worker._reset_inherited_sql_pool()
+            replaced = sql_db._Pool == ('child-pool', 17)
+            os.write(writer, b'1' if replaced else b'0')
+        finally:
+            os._exit(0)
+
+    os.close(writer)
+    try:
+        result = os.read(reader, 1)
+        _, status = os.waitpid(child_pid, 0)
+    finally:
+        os.close(reader)
+
+    assert result == b'1'
+    assert status == 0
+    assert sql_db._Pool is inherited_pool
 
 
 def test_persistent_worker_uses_simple_worker_execution():

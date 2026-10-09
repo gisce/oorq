@@ -322,6 +322,21 @@ class ERPWorkerMixin(object):
 class NoPersistentWorker(ERPWorkerMixin, RQWorker):
     """Worker that preserves RQ's forked work horse isolation."""
 
+    def _reset_inherited_sql_pool(self):
+        """Discard PostgreSQL connections inherited from the worker parent."""
+        import sql_db
+        import tools
+        sql_db._Pool = sql_db.ConnectionPool(
+            int(tools.config['db_maxconn'])
+        )
+
+    def main_work_horse(self, job, queue):
+        # ERP is initialized in the parent worker, so its PostgreSQL sockets
+        # are inherited by fork().  A TLS connection must never be shared by
+        # the parent and child processes.
+        self._reset_inherited_sql_pool()
+        return super(NoPersistentWorker, self).main_work_horse(job, queue)
+
 
 class PersistentWorker(ERPWorkerMixin, RQSimpleWorker):
     """Opt-in worker that executes consecutive jobs in the same process."""
