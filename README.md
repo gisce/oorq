@@ -40,4 +40,72 @@ ResPartner()
 $ PYTHONPATH=~/Projects/OpenERP/server/bin:~/Projects/OpenERP/server/bin/addons rq worker
 ```
 
+The default worker keeps RQ's process isolation and executes every job in a
+forked work horse. The stable `oorq.worker.Worker` entry point can select a
+persistent process from the ERP configuration after `tools.config.parse()`:
+
+```ini
+[options]
+oorq_persistent_worker = true
+oorq_persistent_max_jobs = 100
+pubsub_subscriptions = all
+```
+
+The default is false. Accepted true values are `true`, `1`, `yes` and `on`;
+accepted false values are `false`, `0`, `no` and `off` (case-insensitive).
+Absent, empty and invalid values select `NoPersistentWorker`. As with other ERP
+options, `OPENERP_OORQ_PERSISTENT_WORKER` overrides the configuration file.
+Startup logs report the effective strategy.
+
+Persistent workers recycle cleanly after 100 completed jobs by default. Change
+`oorq_persistent_max_jobs` to another positive integer, or set it to `0` to
+disable preventive recycling. RQ's `--max-jobs` option takes precedence.
+
+Homogeneous queues whose jobs reliably clean up all SQL, ERP context, sudo and
+logging state can also select the persistent implementation explicitly:
+
+```sh
+$ PYTHONPATH=~/Projects/OpenERP/server/bin:~/Projects/OpenERP/server/bin/addons \
+    rq worker -w oorq.worker.PersistentWorker queue_name
+```
+
+`PersistentWorker` uses RQ's `SimpleWorker`, so consecutive jobs can reuse
+the SQL connection pool and in-memory ERP caches. After every job, oorq restores
+the previous thread database marker. Successful jobs keep the database-scoped
+ERP caches; failed jobs invalidate them because they may contain values produced
+by the transaction that ERP rolls back while closing its managed cursor. This
+cleanup never calls `sql_db.close_db()` or `_Pool.close_all()`.
+
+ERP's normal `osv.execute()` path owns its cursor and commits or rolls it back
+before closing it. Business code that creates unmanaged cursors, threads or
+other process-global state remains unsafe for a persistent worker; recycle that
+worker after such a failure. Keep the default `oorq.worker.Worker` for
+heterogeneous, memory-heavy, untrusted or native-code jobs, and roll out
+persistent workers gradually under a process supervisor.
+
+If any job fails, including a recoverable RQ timeout, the persistent worker
+finishes RQ's failure bookkeeping and exits before reserving another job. A
+partially failed `isolated_execute()` requests the same recycle after moving
+the failed IDs to the failed queue. All four oorq entry points restore their
+caller's thread, stack and logging state; report cursors close in a `finally`.
+
+Each persistent job emits a summary log with PID, job id, process ordinal,
+duration, maximum RSS before/after and recycle reason. RSS is the `ru_maxrss`
+high-water mark in KiB on the supported Linux deployments.
+
+For cross-process cache invalidation, subscribe workers to the ERP `all`
+channel as shown above. ERP expands it to `<database>.all`; oorq additionally
+subscribes to `<database>.worker` and `<database>.worker.<queue>`, keeping
+databases isolated. Successful jobs deliberately retain local caches and
+memoized browse values. PubSub `cleancache` messages from another PID invalidate
+the target database; messages from the same PID are intentionally ignored.
+
+For immediate rollback, set `oorq_persistent_worker = false` or bypass automatic
+selection explicitly with `rq worker -w oorq.worker.NoPersistentWorker`. Use
+`rq worker -w oorq.worker.PersistentWorker` only for diagnosis or an intentional
+opt-in. Start with a homogeneous, idempotent canary queue under a supervisor.
+SIGKILL, segfaults and blocked C extensions cannot run Python cleanup. Compare
+the canary with the fork worker on the same dataset and concurrency before
+widening adoption.
+
 **Do fun things :)**
