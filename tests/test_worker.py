@@ -169,7 +169,9 @@ def test_persistent_worker_applies_limit_without_overriding_cli(monkeypatch):
     calls = []
     worker = persistent_worker_state()
     worker.persistent_max_jobs = 100
-    monkeypatch.setattr(worker, '_request_erp_shutdown', lambda: None)
+    monkeypatch.setattr(
+        worker, '_request_erp_shutdown', lambda exit_code=0: None,
+    )
     monkeypatch.setattr(
         SimpleWorker, 'work',
         lambda self, *args, **kwargs: calls.append(kwargs['max_jobs']),
@@ -191,11 +193,38 @@ def test_persistent_worker_stops_erp_services_after_rq_work(monkeypatch):
     )
     monkeypatch.setattr(
         worker, '_request_erp_shutdown',
-        lambda: calls.append('erp_shutdown'),
+        lambda exit_code=0: calls.append(('erp_shutdown', exit_code)),
     )
 
     assert worker.work() is True
-    assert calls == ['rq_teardown', 'erp_shutdown']
+    assert calls == ['rq_teardown', ('erp_shutdown', 0)]
+
+
+def test_failed_job_restarts_persistent_worker_after_erp_shutdown(monkeypatch):
+    calls = []
+    worker = persistent_worker_state()
+    worker.persistent_max_jobs = 100
+    shutdown_request = type('ShutdownRequest', (), {
+        'send': lambda self, **kwargs: calls.append(
+            ('erp_shutdown', kwargs['exit_code'])
+        ),
+    })()
+    signals = types.ModuleType('signals')
+    signals.SHUTDOWN_REQUEST = shutdown_request
+    monkeypatch.setitem(sys.modules, 'signals', signals)
+    monkeypatch.setattr(
+        SimpleWorker, 'perform_job', lambda self, job, queue: False,
+    )
+
+    def work(instance, *args, **kwargs):
+        calls.append('rq_work')
+        instance.perform_job('job', 'queue')
+        return False
+
+    monkeypatch.setattr(SimpleWorker, 'work', work)
+
+    assert worker.work() is False
+    assert calls == ['rq_work', ('erp_shutdown', 1)]
 
 
 def test_non_persistent_worker_does_not_stop_erp_services_after_rq_work(

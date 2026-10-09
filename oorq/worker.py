@@ -245,14 +245,15 @@ class ERPWorkerMixin(object):
             worked = False
         if self.persistent:
             self.log.info('Persistent worker finished; stopping ERP services')
-            self._request_erp_shutdown()
+            exit_code = 1 if self._persistent_exit_reason else 0
+            self._request_erp_shutdown(exit_code=exit_code)
         return worked
 
-    def _request_erp_shutdown(self):
+    def _request_erp_shutdown(self, exit_code=0):
         """Stop PubSub and other ERP services after RQ leaves its work loop."""
         try:
             from signals import SHUTDOWN_REQUEST
-            SHUTDOWN_REQUEST.send(exit_code=0)
+            SHUTDOWN_REQUEST.send(exit_code=exit_code)
         except TypeError:
             # Backwards compatible with receivers without ``exit_code``.
             SHUTDOWN_REQUEST.send()
