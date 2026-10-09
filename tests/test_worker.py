@@ -56,6 +56,25 @@ def test_forked_worker_replaces_inherited_sql_pool(monkeypatch):
     assert sql_db._Pool is inherited_pool
 
 
+def test_forked_worker_resets_sql_pool_before_rq_work_horse(monkeypatch):
+    calls = []
+    worker = NoPersistentWorker.__new__(NoPersistentWorker)
+    monkeypatch.setattr(
+        worker, '_reset_inherited_sql_pool', lambda: calls.append('reset')
+    )
+    monkeypatch.setattr(
+        RQWorker, 'main_work_horse',
+        lambda instance, job, queue: calls.append(
+            ('rq', job, queue)
+        ) or 'result',
+    )
+
+    result = worker.main_work_horse('job', 'queue')
+
+    assert result == 'result'
+    assert calls == ['reset', ('rq', 'job', 'queue')]
+
+
 def test_persistent_worker_uses_simple_worker_execution():
     assert issubclass(PersistentWorker, ERPWorkerMixin)
     assert issubclass(PersistentWorker, SimpleWorker)
