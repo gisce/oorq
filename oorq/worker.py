@@ -222,6 +222,7 @@ class ERPWorkerMixin(object):
     def work(self, *args, **kwargs):
         """Apply the recycle limit and stop ERP services before exiting."""
         if self.persistent:
+            first_job_ordinal = self._persistent_job_ordinal
             args = list(args)
             if len(args) >= 5:
                 if args[4] is None:
@@ -229,11 +230,11 @@ class ERPWorkerMixin(object):
             elif kwargs.get('max_jobs') is None:
                 kwargs['max_jobs'] = self.persistent_max_jobs
             args = tuple(args)
+            max_jobs = args[4] if len(args) >= 5 else kwargs['max_jobs']
             if self.persistent_max_jobs:
                 self.log.info(
                     'Persistent worker recycle limit: %d jobs',
-                    kwargs.get('max_jobs', args[4] if len(args) >= 5 else
-                               self.persistent_max_jobs),
+                    max_jobs,
                 )
         if LEGACY_RQ:
             # RQ 1.3 registers the worker before installing signal handlers.
@@ -244,6 +245,16 @@ class ERPWorkerMixin(object):
         except StopRequested:
             worked = False
         if self.persistent:
+            completed_jobs = self._persistent_job_ordinal - first_job_ordinal
+            if (not self._persistent_exit_reason and completed_jobs and
+                    max_jobs is not None and completed_jobs >= max_jobs):
+                # RQ treats its job limit as a normal stop, but a persistent
+                # process needs the same supervisor restart as a failed job.
+                self._persistent_exit_reason = 'max_jobs'
+                self.log.warning(
+                    'Persistent worker marked for recycle: %s',
+                    self._persistent_exit_reason,
+                )
             self.log.info('Persistent worker finished; stopping ERP services')
             exit_code = 1 if self._persistent_exit_reason else 0
             self._request_erp_shutdown(exit_code=exit_code)
