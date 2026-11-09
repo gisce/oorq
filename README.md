@@ -111,3 +111,11 @@ the canary with the fork worker on the same dataset and concurrency before
 widening adoption.
 
 **Do fun things :)**
+
+## Thread-local context
+
+OORQ serializes the active `Sudo` context when a decorated method enqueues a
+job and restores it while the worker executes that job. `Sudo` is thread-local:
+if application code creates a new thread, that thread must enter its own
+`Sudo(uid, gid)` context before enqueuing. OORQ cannot infer the caller thread's
+context from a newly-created thread.

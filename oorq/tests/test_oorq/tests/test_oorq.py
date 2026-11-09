@@ -8,12 +8,14 @@ from datetime import datetime
 from rq import Worker
 from time import sleep
 import os
+import sys
 from osv import osv
+from service.security import Sudo
 
 
 
 class TestOORQ(testing.OOTestCase):
-    _queues = ['default', 'dependency']
+    _queues = ['default', 'dependency', 'sudo_fork', 'sudo_persistent']
 
     def setUp(self):
         super(TestOORQ, self).setUp()
@@ -79,10 +81,16 @@ class TestOORQ(testing.OOTestCase):
         cls.env['OPENERP_DB_NAME'] = config['db_name']
         cls.workers_process = []
         cls.redis_url = config.get('redis_url') or 'redis://localhost:6379/0'
-        cls.cmd = ['rq', 'worker', '-u', cls.redis_url, '-w', 'oorq.worker.Worker']
+        rq_command = os.path.join(os.path.dirname(sys.executable), 'rq')
+        cls.cmd = [rq_command, 'worker', '-u', cls.redis_url, '-w',
+                   'oorq.worker.Worker']
         cls.cwd = os.getcwd()
+        worker_classes = {
+            'sudo_persistent': 'oorq.worker.PersistentWorker',
+        }
         for queue_name in cls._queues:
             _cmd = copy(cls.cmd)
+            _cmd[-1] = worker_classes.get(queue_name, 'oorq.worker.Worker')
             _cmd.extend([queue_name])
             cls.workers_process.append(
                 subprocess.Popen(_cmd, env=cls.env, cwd=cls.cwd, stdout=cls.log_file, stderr=subprocess.STDOUT)
@@ -104,6 +112,53 @@ class TestOORQAsync(TestOORQ):
     Test class for OORQ asynchronous operations.
     This class inherits from TestOORQ and runs tests in an asynchronous context.
     """
+
+    def _wait_results(self, jobs):
+        self._empty_wait()
+        results = []
+        for job in jobs:
+            job.refresh()
+            results.append(job.result)
+        return results
+
+    def _assert_sudo_propagation(self, method_name):
+        partner_obj = self.openerp.pool.get('res.partner')
+        expected = (43, 132)
+        with Transaction().start(self.database) as txn:
+            method = getattr(partner_obj, method_name)
+            with Sudo(*expected):
+                sudo_job = method(
+                    txn.cursor, txn.user, self.new_partner_ids[:2]
+                )
+            plain_job = method(
+                txn.cursor, txn.user, self.new_partner_ids[:1]
+            )
+
+        sudo_jobs = sudo_job if isinstance(sudo_job, list) else [sudo_job]
+        plain_jobs = plain_job if isinstance(plain_job, list) else [plain_job]
+        if method_name.startswith('sudo_split_'):
+            sudo_result = [expected]
+            plain_result = [None]
+        else:
+            sudo_result = expected
+            plain_result = None
+        self.assertEqual(
+            self._wait_results(sudo_jobs + plain_jobs),
+            [sudo_result] * len(sudo_jobs) +
+            [plain_result] * len(plain_jobs),
+        )
+
+    def test_sudo_reaches_fork_worker_without_leaking(self):
+        self._assert_sudo_propagation('sudo_fork')
+
+    def test_sudo_reaches_persistent_worker_without_leaking(self):
+        self._assert_sudo_propagation('sudo_persistent')
+
+    def test_sudo_reaches_isolated_split_fork_worker(self):
+        self._assert_sudo_propagation('sudo_split_fork')
+
+    def test_sudo_reaches_isolated_split_persistent_worker(self):
+        self._assert_sudo_propagation('sudo_split_persistent')
 
     def test_write_async_on_commit(self):
         partner_obj = self.openerp.pool.get('res.partner')
