@@ -123,8 +123,15 @@ class TestOORQAsync(TestOORQ):
 
     def _assert_sudo_propagation(self, method_name):
         partner_obj = self.openerp.pool.get('res.partner')
-        expected = (43, 132)
         with Transaction().start(self.database) as txn:
+            imd_obj = self.openerp.pool.get('ir.model.data')
+            sudo_uid = imd_obj.get_object_reference(
+                txn.cursor, txn.user, 'base', 'user_demo'
+            )[1]
+            sudo_gid = imd_obj.get_object_reference(
+                txn.cursor, txn.user, 'base', 'group_user'
+            )[1]
+            expected = (sudo_uid, sudo_gid)
             method = getattr(partner_obj, method_name)
             with Sudo(*expected):
                 sudo_job = method(
