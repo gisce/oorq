@@ -113,13 +113,30 @@ class TestOORQAsync(TestOORQ):
     This class inherits from TestOORQ and runs tests in an asynchronous context.
     """
 
-    def _wait_results(self, jobs):
-        self._empty_wait()
-        results = []
-        for job in jobs:
-            job.refresh()
-            results.append(job.result)
-        return results
+    def _wait_results(self, jobs, timeout=20):
+        pending = list(jobs)
+        start_time = datetime.now()
+        while pending:
+            for job in list(pending):
+                status = job.get_status()
+                if status == 'failed':
+                    self.fail(
+                        "Job %s failed: %s" % (job.id, job.exc_info)
+                    )
+                if status == 'finished':
+                    pending.remove(job)
+
+            if not pending:
+                break
+            if (datetime.now() - start_time).total_seconds() >= timeout:
+                self.fail(
+                    "Timeout waiting for jobs: %s" % ', '.join(
+                        job.id for job in pending
+                    )
+                )
+            sleep(0.1)
+
+        return [job.result for job in jobs]
 
     def _assert_sudo_propagation(self, method_name):
         partner_obj = self.openerp.pool.get('res.partner')
