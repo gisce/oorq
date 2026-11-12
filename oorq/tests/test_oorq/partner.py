@@ -6,6 +6,7 @@ from oorq.oorq import AsyncMode
 from rq.job import Job
 from service.security import Sudo
 from service.taskmanager import TaskManager
+from ctx import sudo
 
 
 class ResPartner(osv.osv):
@@ -96,6 +97,27 @@ class ResPartner(osv.osv):
             context = {}
         with Sudo(uid, 'base.group_user'):
             self.write_async(cursor, uid, ids, values, context)
+
+    def _sudo_context(self):
+        if not sudo:
+            return None
+        return sudo.uid, sudo.gid
+
+    @job(queue='sudo_fork')
+    def sudo_fork(self, cursor, uid, ids, context=None):
+        return self._sudo_context()
+
+    @job(queue='sudo_persistent')
+    def sudo_persistent(self, cursor, uid, ids, context=None):
+        return self._sudo_context()
+
+    @split_job(queue='sudo_fork', chunk_size=1, isolated=True)
+    def sudo_split_fork(self, cursor, uid, ids, context=None):
+        return self._sudo_context()
+
+    @split_job(queue='sudo_persistent', chunk_size=1, isolated=True)
+    def sudo_split_persistent(self, cursor, uid, ids, context=None):
+        return self._sudo_context()
 
     @job(queue='default', on_commit=True)
     def write_async_with_task(self, cr, user, ids, vals, context=None):
