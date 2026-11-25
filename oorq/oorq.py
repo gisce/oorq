@@ -197,11 +197,14 @@ def serialize_date(dt):
     return dt.strftime('%Y-%m-%d %H:%M:%S')
 
 
-def sql_db_dsn(db_name):
+def sql_db_dsn(db_name, db_config_pattern=None):
     import tools
     _dsn = ''
     for p in ('host', 'port', 'user', 'password'):
-        cfg = tools.config['db_' + p]
+        if db_config_pattern is not None:
+            cfg = tools.config['db_' + db_config_pattern + '_' + p]
+        else:
+            cfg = tools.config['db_' + p]
         if cfg:
             _dsn += '%s=%s ' % (p, cfg)
     return '%sdbname=%s' % (_dsn, db_name)
