@@ -1,7 +1,11 @@
 from rq import Worker as RQWorker
 from rq.worker import SimpleWorker
 from redis.exceptions import ConnectionError as RedisConnectionError
+import os
 import sys
+import types
+
+import pytest
 
 from oorq.worker import (
     DEFAULT_PERSISTENT_MAX_JOBS, ERPWorkerMixin, NoPersistentWorker,
@@ -19,6 +23,39 @@ def test_default_worker_keeps_fork_based_rq_worker():
     assert issubclass(Worker, NoPersistentWorker)
     assert issubclass(Worker, RQWorker)
     assert Worker.job_class is WorkerJob
+
+
+def test_forked_worker_replaces_inherited_sql_pool(monkeypatch):
+    inherited_pool = object()
+    sql_db = types.ModuleType('sql_db')
+    sql_db._Pool = inherited_pool
+    sql_db.ConnectionPool = lambda maxconn: ('child-pool', maxconn)
+    tools = types.ModuleType('tools')
+    tools.config = {'db_maxconn': '17'}
+    monkeypatch.setitem(sys.modules, 'sql_db', sql_db)
+    monkeypatch.setitem(sys.modules, 'tools', tools)
+    reader, writer = os.pipe()
+
+    child_pid = os.fork()
+    if child_pid == 0:
+        try:
+            worker = NoPersistentWorker.__new__(NoPersistentWorker)
+            worker._reset_inherited_sql_pool()
+            replaced = sql_db._Pool == ('child-pool', 17)
+            os.write(writer, b'1' if replaced else b'0')
+        finally:
+            os._exit(0)
+
+    os.close(writer)
+    try:
+        result = os.read(reader, 1)
+        _, status = os.waitpid(child_pid, 0)
+    finally:
+        os.close(reader)
+
+    assert result == b'1'
+    assert status == 0
+    assert sql_db._Pool is inherited_pool
 
 
 def test_persistent_worker_uses_simple_worker_execution():
@@ -49,6 +86,7 @@ def persistent_worker_state():
     worker = PersistentWorker.__new__(PersistentWorker)
     worker.persistent = True
     worker._stop_requested = False
+    worker._persistent_job_ordinal = 0
     worker._persistent_exit_reason = None
     worker.log = type('Log', (), {
         'warning': lambda *args: None,
@@ -134,7 +172,9 @@ def test_persistent_worker_applies_limit_without_overriding_cli(monkeypatch):
     calls = []
     worker = persistent_worker_state()
     worker.persistent_max_jobs = 100
-    monkeypatch.setattr(worker, '_request_erp_shutdown', lambda: None)
+    monkeypatch.setattr(
+        worker, '_request_erp_shutdown', lambda exit_code=0: None,
+    )
     monkeypatch.setattr(
         SimpleWorker, 'work',
         lambda self, *args, **kwargs: calls.append(kwargs['max_jobs']),
@@ -156,11 +196,104 @@ def test_persistent_worker_stops_erp_services_after_rq_work(monkeypatch):
     )
     monkeypatch.setattr(
         worker, '_request_erp_shutdown',
-        lambda: calls.append('erp_shutdown'),
+        lambda exit_code=0: calls.append(('erp_shutdown', exit_code)),
     )
 
     assert worker.work() is True
-    assert calls == ['rq_teardown', 'erp_shutdown']
+    assert calls == ['rq_teardown', ('erp_shutdown', 0)]
+
+
+def test_failed_job_restarts_persistent_worker_after_erp_shutdown(monkeypatch):
+    calls = []
+    worker = persistent_worker_state()
+    worker.persistent_max_jobs = 100
+    shutdown_request = type('ShutdownRequest', (), {
+        'send': lambda self, **kwargs: calls.append(
+            ('erp_shutdown', kwargs['exit_code'])
+        ),
+    })()
+    signals = types.ModuleType('signals')
+    signals.SHUTDOWN_REQUEST = shutdown_request
+    monkeypatch.setitem(sys.modules, 'signals', signals)
+    monkeypatch.setattr(
+        SimpleWorker, 'perform_job', lambda self, job, queue: False,
+    )
+
+    def work(instance, *args, **kwargs):
+        calls.append('rq_work')
+        instance.perform_job('job', 'queue')
+        return False
+
+    monkeypatch.setattr(SimpleWorker, 'work', work)
+
+    assert worker.work() is False
+    assert calls == ['rq_work', ('erp_shutdown', 1)]
+
+
+@pytest.mark.parametrize('worker_class', [PersistentWorker, Worker])
+@pytest.mark.parametrize('configured_limit,args,kwargs,queued_jobs,expected_jobs,reason', [
+    (2, (), {}, 3, 2, 'max_jobs'),
+    (2, (), {'max_jobs': 1}, 3, 1, 'max_jobs'),
+    (1, (), {'max_jobs': 3}, 4, 3, 'max_jobs'),
+    (2, (True, 'INFO', None, None, 1), {}, 3, 1, 'max_jobs'),
+    (2, (True, 'INFO', None, None, None), {}, 3, 2, 'max_jobs'),
+    (None, (), {}, 3, 3, None),
+    (3, (), {}, 2, 2, None),
+    (2, (), {}, 0, 0, None),
+])
+def test_persistent_worker_exit_code_after_real_rq_work_loop(
+        monkeypatch, worker_class, configured_limit, args, kwargs, queued_jobs,
+        expected_jobs, reason):
+    worker = worker_class.__new__(worker_class)
+    worker.persistent = True
+    worker.persistent_max_jobs = configured_limit
+    worker._persistent_job_ordinal = 0
+    worker._persistent_exit_reason = None
+    worker._stop_requested = False
+    worker._is_horse = False
+    worker.scheduler = None
+    worker.name = 'test'
+    calls = []
+    errors = []
+    worker.log = type('Log', (), {
+        'info': lambda *args: None,
+        'warning': lambda *args: None,
+        'error': lambda *args, **kwargs: errors.append(args),
+    })()
+    for method in (
+            'bootstrap', 'teardown', 'register_birth', 'register_death',
+            '_install_signal_handlers', 'check_for_suspension', 'heartbeat',
+            'set_state'):
+        monkeypatch.setattr(worker, method, lambda *args: None, raising=False)
+    monkeypatch.setattr(worker, 'queue_names', lambda: [])
+    monkeypatch.setattr(
+        RQWorker, 'should_run_maintenance_tasks', property(lambda self: False),
+    )
+    jobs = [('job-{}'.format(index), 'queue') for index in range(queued_jobs)]
+    monkeypatch.setattr(
+        worker, 'dequeue_job_and_maintain_ttl',
+        lambda *args: jobs.pop(0) if jobs else None,
+    )
+    monkeypatch.setattr(
+        SimpleWorker, 'execute_job',
+        lambda self, job, queue: self.perform_job(job, queue),
+    )
+    monkeypatch.setattr(RQWorker, 'perform_job', lambda *args: True)
+    shutdown_request = type('ShutdownRequest', (), {
+        'send': lambda self, **kwargs: calls.append(kwargs['exit_code']),
+    })()
+    signals = types.ModuleType('signals')
+    signals.SHUTDOWN_REQUEST = shutdown_request
+    monkeypatch.setitem(sys.modules, 'signals', signals)
+    if not args:
+        kwargs = dict(kwargs, burst=True)
+
+    assert worker.work(*args, **kwargs) is bool(expected_jobs)
+    assert worker._persistent_job_ordinal == expected_jobs
+    assert len(jobs) == queued_jobs - expected_jobs
+    assert worker._persistent_exit_reason == reason
+    assert calls == [1 if reason else 0]
+    assert errors == []
 
 
 def test_non_persistent_worker_does_not_stop_erp_services_after_rq_work(

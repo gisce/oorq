@@ -8,5 +8,6 @@ rq-dashboard
 osconf
 autoworker
 six
+pytz
 MarkupSafe<=2.0.1
 pytz

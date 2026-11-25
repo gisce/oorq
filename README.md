@@ -60,6 +60,8 @@ Startup logs report the effective strategy.
 Persistent workers recycle cleanly after 100 completed jobs by default. Change
 `oorq_persistent_max_jobs` to another positive integer, or set it to `0` to
 disable preventive recycling. RQ's `--max-jobs` option takes precedence.
+Reaching the effective job limit shuts down ERP services and exits with code
+`1`, like a failed job, so the process supervisor can restart the worker.
 
 Homogeneous queues whose jobs reliably clean up all SQL, ERP context, sudo and
 logging state can also select the persistent implementation explicitly:

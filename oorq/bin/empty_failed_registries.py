@@ -1,5 +1,6 @@
 import sys
 
+from six.moves import range
 from redis import from_url
 from rq import use_connection, Queue
 from rq.registry import FailedJobRegistry
@@ -15,7 +16,7 @@ all_queues = Queue().all()
 
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
-    for i in xrange(0, len(l), n):
+    for i in range(0, len(l), n):
         yield l[i:i+n]
 
 
